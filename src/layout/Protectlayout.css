@@ -1,0 +1,93 @@
+/* src/layout/AppLayout.css */
+
+.app-layout-container {
+  display: flex; /* Sử dụng Flexbox cho container chính */
+  flex-direction: column; /* Header, (Sidebar + Main), Footer xếp chồng lên nhau */
+  min-height: 100vh; /* Chiếm toàn bộ chiều cao màn hình */
+  /* background-color: #f0f2f5;  Màu nền chung nếu muốn */
+}
+
+.app-header {
+  height: 60px; /* Chiều cao cố định cho Header */
+  background-color: #ffffff; /* Ví dụ */
+  border-bottom: 1px solid #dee2e6;
+  /* Nếu Header là fixed: */
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1030; /* Cao hơn các phần tử khác */
+  display: flex; /* Căn chỉnh nội dung bên trong Header nếu cần */
+  align-items: center;
+  padding: 0 1rem; /* Padding cho Header */
+}
+
+/* Wrapper cho Sidebar và Main Content để chúng nằm cạnh nhau */
+.app-content-wrapper {
+  display: flex;
+  flex-grow: 1; /* Chiếm không gian còn lại theo chiều dọc */
+  /* Nếu Header fixed, thêm padding-top cho wrapper này */
+  padding-top: 60px; /* Bằng chiều cao Header */
+}
+
+
+.app-sidebar {
+  width: 260px; /* Chiều rộng cố định, PHẢI KHỚP với biến JS */
+  background-color: #f8f9fa; /* Ví dụ */
+  border-right: 1px solid #dee2e6;
+  overflow-y: auto; /* Cho phép cuộn nếu nội dung sidebar dài */
+  /* Nếu muốn Sidebar cố định bên trái và cuộn độc lập: */
+  position: fixed;
+  left: 0;
+  top: 60px; /* Bắt đầu từ dưới Header (nếu Header fixed) */
+  bottom: 50px; /* Kết thúc trên Footer (nếu Footer fixed) */
+  /* Hoặc nếu Footer không fixed: */
+  /* bottom: 0; */
+  /* height: calc(100vh - 60px); */ /* Nếu không có Footer fixed */
+  z-index: 1020; /* Dưới Header nhưng trên Main Content nếu có thể đè */
+}
+
+.app-main-content {
+  flex-grow: 1; /* Chiếm không gian còn lại theo chiều ngang */
+  padding: 1.5rem; /* Padding cho nội dung */
+  overflow-y: auto; /* Cho phép cuộn dọc cho nội dung chính */
+  /* Đẩy nội dung sang phải để không bị Sidebar che */
+  margin-left: 260px; /* Bằng chiều rộng Sidebar */
+  /* Nếu Header fixed, và content-wrapper không có padding-top: */
+  /* padding-top: calc(60px + 1.5rem); */ /* Header height + desired padding */
+  /* Nếu Footer fixed, thêm padding-bottom: */
+  /* padding-bottom: calc(50px + 1.5rem); Footer height + desired padding */
+
+  /* Nếu Header và Footer đều fixed, main content sẽ nằm giữa */
+   padding-top: calc(60px + 1.5rem); /* Khoảng trống cho Header fixed + padding mong muốn */
+   /* Nếu Footer cũng fixed và bạn muốn nội dung không bị che */
+   /* padding-bottom: calc(50px + 1.5rem); Khoảng trống cho Footer fixed + padding mong muốn */
+   /* min-height tính toán để main content có thể scroll được nếu nội dung ngắn */
+   min-height: calc(100vh - 60px - 50px); /* (Viewport - Header - Footer) */
+}
+
+.app-footer {
+  height: 50px; /* Chiều cao cố định cho Footer */
+  background-color: #ffffff; /* Ví dụ */
+  border-top: 1px solid #dee2e6;
+  display: flex;
+  align-items: center;
+  justify-content: center; /* Căn giữa nội dung footer */
+  /* Nếu Sidebar fixed, Footer cũng cần margin-left */
+  margin-left: 260px; /* Bằng chiều rộng Sidebar */
+
+  /* Nếu muốn Footer cố định ở cuối trang */
+  /* position: fixed;
+  bottom: 0;
+  left: 260px;
+  right: 0;
+  z-index: 1010; */
+}
+
+/* Điều chỉnh cho trường hợp không có Header/Footer fixed */
+/* Nếu Header không fixed (position: static hoặc relative),
+   thì .app-content-wrapper không cần padding-top,
+   và .app-sidebar có thể top: 0 (nếu không có Header),
+   .app-main-content không cần padding-top lớn.
+*/
+/* Tương tự cho Footer */

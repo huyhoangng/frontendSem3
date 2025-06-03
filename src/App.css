@@ -1,38 +1,250 @@
-.App {
-  text-align: center;
+/* src/App.css */
+
+/* ... (Biến CSS :root và style body giữ nguyên như trước) ... */
+:root {
+  --header-height: 60px;
+  --sidebar-width: 220px;
+  --footer-height: 50px;
+  --main-content-padding: 1.5rem;
+  --sidebar-internal-padding: 0.75rem;
 }
 
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #f0f2f5;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
+
+.app-header-fixed {
+  height: var(--header-height);
+  background-color: #ffffff;
+  border-bottom: 1px solid #e7e7e7;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1030; /* Header ở trên cùng */
+  display: flex;
+  align-items: center;
+  /* padding đã được xử lý trong HeaderComponent bằng class Bootstrap hoặc inline style */
 }
 
-.App-header {
-  background-color: #282c34;
-  min-height: 100vh;
+/* Dropdown menu styling */
+.dropdown-menu {
+   margin-top: 0.5rem !important;
+    border: 1px solid rgba(0,0,0,.1); /* Viền nhẹ hơn mặc định của Bootstrap */
+}
+
+.notifications-block-wrap {
+  /* minWidth và maxHeight đã được đặt inline style trong Header.js */
+  /* overflowY đã được đặt inline style */
+}
+
+.notifications-block .dropdown-item {
+    white-space: normal; /* Cho phép text xuống dòng */
+}
+.notifications-block .dropdown-item:hover,
+.notifications-block .dropdown-item:focus {
+    background-color: #f8f9fa;
+}
+
+.dropdown-menu-social {
+  /* minWidth đã được đặt inline style */
+  /* max-height: calc(100vh - var(--header-height) - 40px); */ /* Có thể không cần nếu social links ít */
+  /* overflow-y: auto; */ /* Tương tự */
+}
+
+.dropdown-menu-social .dropdown-item:hover,
+.dropdown-menu-social .dropdown-item:focus {
+    background-color: #f8f9fa;
+    border-radius: 0.25rem;
+}
+
+
+/* ... (Các style khác cho .sidebar-container, .app-main-content-area, .app-footer-area giữ nguyên như trước) ... */
+.sidebar-container {
+  width: var(--sidebar-width);
+  background-color: #ffffff;
+  position: fixed;
+  left: 0;
+  top: var(--header-height);
+  bottom: 0;
+  z-index: 1020;
+  overflow-y: auto;
+}
+
+.sidebar-container .sidebar-content-wrapper {
   display: flex;
   flex-direction: column;
+  height: 100%;
+  padding: var(--sidebar-internal-padding);
+  box-sizing: border-box;
+}
+
+.sidebar-container .nav {
+  width: 100%;
+  flex-grow: 1;
+}
+
+.sidebar-container .nav-link {
+  color: #495057;
+  padding: 0.75rem var(--sidebar-internal-padding);
+  display: flex;
   align-items: center;
   justify-content: center;
-  font-size: calc(10px + 2vmin);
+  border-radius: 0.375rem;
+  margin-bottom: 0.3rem;
+  text-decoration: none;
+  transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
+  cursor: pointer;
+}
+
+.sidebar-container .nav-link .nav-link-text {
+   margin-left: 0.5rem;
+}
+
+.sidebar-container .nav-link:hover {
+  background-color: #f8f9fa;
+  color: #dc3545;
+}
+
+.sidebar-container .nav-link.active {
+  background-color: #dc3545;
   color: white;
+  font-weight: 500;
 }
 
-.App-link {
-  color: #61dafb;
+.sidebar-container .nav-link.active .bi,
+.sidebar-container .nav-link.active .nav-link-text,
+.sidebar-container .nav-link:hover .bi,
+.sidebar-container .nav-link:hover .nav-link-text {
+  color: inherit;
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.sidebar-container .nav-link .bi {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+.sidebar-bottom-section {
+  margin-top: auto;
+  width: 100%;
+}
+
+.featured-box {
+  background-color: #f8f9fa;
+  padding: 1rem;
+  border-radius: 0.375rem;
+}
+
+.logout-section .nav-link {
+    justify-content: center;
+}
+
+.app-main-content-area {
+  margin-left: var(--sidebar-width);
+  padding-top: calc(var(--header-height) + var(--main-content-padding));
+  padding-right: var(--main-content-padding);
+  padding-bottom: calc(var(--footer-height) + var(--main-content-padding));
+  padding-left: var(--main-content-padding);
+  flex-grow: 1;
+  overflow-y: auto;
+  position: relative;
+  z-index: 1;
+  background-color: #f8f9fa;
+  min-height: calc(100vh - var(--header-height) - var(--footer-height));
+}
+
+.app-footer-area {
+  height: var(--footer-height);
+  background-color: #ffffff;
+  border-top: 1px solid #e7e7e7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 1rem;
+  margin-left: var(--sidebar-width);
+  z-index: 1000;
+}
+
+/* Các style cho OverviewPage (custom-block, profile-image, etc.) */
+.custom-block {
+    background-color: #ffffff;
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.075);
+}
+.custom-block-balance {
+    background: linear-gradient(135deg, #e6f2ff 0%, #d9eaff 100%);
+    color: #333;
+    position: relative;
+}
+.profile-image {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin-right: 10px;
+}
+.exchange-image {
+    width: 30px;
+    height: 20px;
+    object-fit: cover;
+    margin-right: 10px;
+    border-radius: 3px;
+}
+/* App.css hoặc SettingsPage.css */
+
+.settings-page-content {
+  /* padding đã được xử lý bởi .app-main-content-area */
+}
+
+.settings-page-content .nav-tabs .nav-link {
+  color: #6c757d; /* Màu chữ mặc định cho tab không active */
+  border-bottom-width: 2px; /* Để border active trông đẹp hơn */
+  padding: 0.75rem 1.25rem;
+}
+
+.settings-page-content .nav-tabs .nav-link.active {
+  color: #0d6efd; /* Màu primary của Bootstrap */
+  border-color: #0d6efd #0d6efd #fff; /* Border cho tab active */
+  font-weight: 500;
+}
+
+.settings-page-content .tab-content > .tab-pane {
+  /* Không cần display: none vì React sẽ render có điều kiện */
+  /* Bootstrap's fade, show, active classes sẽ được React quản lý thông qua logic renderTabContent */
+}
+
+.settings-page-content .custom-form .form-control,
+.settings-page-content .custom-form .form-select {
+  margin-bottom: 1rem; /* Khoảng cách giữa các input */
+}
+
+.settings-page-content .custom-form .profile-image {
+    width: 48px; /* Kích thước avatar trong form */
+    height: 48px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.custom-block-contact {
+    border-radius: 0.375rem; /* Bo góc */
+}
+
+/* Style cho switch đẹp hơn */
+.settings-page-content .form-switch .form-check-label {
+    cursor: pointer;
+    flex-grow: 1; /* Để label chiếm không gian và đẩy switch sang phải */
+}
+.settings-page-content .form-switch .form-check-input {
+    cursor: pointer;
+    width: 3em; /* Kích thước switch */
+    height: 1.5em;
 }
