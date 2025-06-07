@@ -1,86 +1,149 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink, Link, useNavigate } from 'react-router-dom';
 
-// Đảm bảo bạn đã import CSS của Sidebar nếu có style riêng cho nó
-// import './SidebarScreen.css'; // Nếu bạn có file CSS riêng cho Sidebar
+import 'bootstrap/dist/css/bootstrap.min.css';
+import 'bootstrap/dist/js/bootstrap.bundle.min.js'; // <<--- VERY IMPORTANT
 
-const SidebarScreen = ({ className }) => { // <<--- NHẬN className prop
+const SidebarScreen = ({ className }) => {
     const navigate = useNavigate();
+    const [openSubmenuKey, setOpenSubmenuKey] = useState(null); // State to manage open submenu
 
     const menuItems = [
-        { to: "/", icon: "bi-house-fill", text: "Overview" },
-        { to: "/wallet", icon: "bi-wallet", text: "My Wallet" },
-        { to: "/category", icon: "bi-tags-fill", text: "Danh Mục"}, 
-        { to: "/profile", icon: "bi-person", text: "Profile" },
-        { to: "/setting", icon: "bi-gear", text: "Settings" },
-        { to: "/help-center", icon: "bi-question-circle", text: "Help Center" },
+        { to: "/overview", icon: "bi-house-fill", text: "Overview" },
+        { to: "/wallet", icon: "bi-wallet2", text: "My Account" },
+        { to: "/category", icon: "bi-tags-fill", text: "Categories" },
+        
+    ];
+
+    // Structure for dropdown menus
+    const dropdownMenus = [
+        {
+            key: 'pagesManagement',
+            icon: "bi-folder-fill", // Bootstrap Icon
+            text: "Services",
+            children: [
+                { header: "Website Content:" },
+                { to: "/budgets", text: "Budget" },
+                { to: "/goals", text: "Goals" },
+                { to: "/transactions", text: "Transactions" },
+                { to: "/media-library", text: "Media Library" },
+            ]
+        },
+        
+    ];
+
+    const accountSettingsItems = [
+        { to: "/profile", icon: "bi-person-circle", text: "Profile" },
+        { to: "/setting", icon: "bi-gear-fill", text: "Settings" },
+        { to: "/help-center", icon: "bi-question-circle-fill", text: "Help Center" },
     ];
 
     const handleLogout = () => {
-        // Xử lý logic logout thực tế (xóa token, v.v.)
-        console.log("User logged out");
+        localStorage.removeItem('authToken');
         navigate('/login');
     };
 
-    // Kết hợp className từ App.js với các class cố định của Sidebar
-    const sidebarClasses = `sidebar-container ${className || ''}`;
+    const toggleSubmenu = (key) => {
+        setOpenSubmenuKey(openSubmenuKey === key ? null : key);
+    };
+
+    const sidebarClasses = `sidebar-container bg-white shadow-sm ${className || ''}`;
 
     return (
-        // Bỏ các class grid col-* của Bootstrap nếu dùng position:fixed
-        // Sử dụng class `sidebar-container` để dễ target hơn, và `className` được truyền từ App.js
         <nav id="sidebarMenu" className={sidebarClasses}>
-            {/*
-                `position-sticky` và `pt-3` có thể vẫn hữu ích cho nội dung bên trong sidebar.
-                `sidebar-sticky` là class của Bootstrap template, có thể giữ lại hoặc bỏ nếu không cần.
-            */}
-            <div className="position-sticky pt-3 sidebar-content-wrapper"> {/* Thêm một wrapper cho nội dung */}
-                {/*
-                    Để mt-auto trên featured-box hoạt động, ul này cần là flex container và có chiều cao.
-                    Hoặc, chúng ta có thể làm cho .sidebar-content-wrapper là flex container.
-                */}
-                <ul className="nav flex-column h-100"> {/* h-100 có thể cần thiết */}
+            <div className="sidebar-content-wrapper pt-3">
+                <ul className="nav flex-column">
+                    {/* Single menu items */}
                     {menuItems.map((item) => (
                         <li className="nav-item" key={item.to}>
                             <NavLink
-                                className="nav-link" // Sẽ được style bởi CSS
+                                className="nav-link d-flex align-items-center"
                                 to={item.to}
-                                end={item.to === "/"} // Quan trọng cho "Overview"
+                                end={item.to === "/overview"} // Adjust 'end' for the homepage
                             >
-                                <i className={`${item.icon}`}></i> {/* Bỏ me-2 nếu CSS xử lý margin */}
-                                <span className="nav-link-text">{item.text}</span> {/* Bọc text trong span */}
+                                <i className={`${item.icon} sidebar-icon me-2`}></i>
+                                <span className="nav-link-text">{item.text}</span>
                             </NavLink>
                         </li>
                     ))}
 
-                    {/* Phần "Upgrade" và "Logout" sẽ được đẩy xuống cuối bằng CSS cho wrapper của chúng */}
-                    <li className="nav-item sidebar-bottom-section mt-auto"> {/* mt-auto ở đây */}
-                        <div className="featured-box mb-3 mx-2 text-center"> {/* text-center cho nội dung bên trong */}
-                            <img
-                                src="/images/credit-card.png" // Đảm bảo đường dẫn đúng
-                                className="img-fluid mb-2" // Giảm margin bottom
-                                alt="Upgrade to premium"
-                                style={{ maxWidth: '80px' }} // Giới hạn kích thước ảnh
-                            />
-                            <Link className="btn btn-sm btn-danger w-100" to="/upgrade"> {/* btn-sm, btn-danger (màu đỏ) */}
-                                Upgrade
-                            </Link>
-                        </div>
-
-                        <div className="logout-section border-top pt-2 mx-2">
-                            <button
-                                className="nav-link text-start w-100"
-                                onClick={handleLogout}
-                                style={{
-                                    border: 'none',
-                                    background: 'transparent',
-                                    // paddingLeft: '0', // CSS sẽ xử lý padding của nav-link
-                                    // paddingRight: '0',
+                    {/* Dropdown menus */}
+                    {dropdownMenus.map((menu) => (
+                        <li className="nav-item" key={menu.key}>
+                            <a
+                                className={`nav-link d-flex align-items-center justify-content-between ${openSubmenuKey === menu.key ? '' : 'collapsed'}`}
+                                href="#" // href="#" to prevent navigation on click
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    toggleSubmenu(menu.key);
                                 }}
+                                // aria-expanded and aria-controls for accessibility
+                                aria-expanded={openSubmenuKey === menu.key}
+                                aria-controls={`collapse-${menu.key}`}
+                                data-bs-toggle="collapse"
+                                data-bs-target={`#collapse-${menu.key}`}
                             >
-                                <i className="bi-box-arrow-left"></i> {/* Bỏ me-2 */}
-                                <span className="nav-link-text">Logout</span> {/* Bọc text */}
-                            </button>
-                        </div>
+                                <div>
+                                    <i className={`${menu.icon} sidebar-icon me-2`}></i>
+                                    <span className="nav-link-text">{menu.text}</span>
+                                </div>
+                                <i className={`bi ${openSubmenuKey === menu.key ? 'bi-chevron-down' : 'bi-chevron-right'} ms-auto sidebar-icon-toggle`}></i>
+                            </a>
+                            <div
+                                className={`collapse submenu-collapse ${openSubmenuKey === menu.key ? 'show' : ''}`}
+                                id={`collapse-${menu.key}`} // ID must match data-bs-target
+                            >
+                                <div className="py-2 collapse-inner rounded my-1 ms-3"> {/* ms-3 for indentation */}
+                                    {menu.children.map((child, childIndex) => (
+                                        child.header ? (
+                                            <h6 className="collapse-header px-3 mt-2 mb-1 text-uppercase small" key={`${menu.key}-header-${childIndex}`}>
+                                                {child.header}
+                                            </h6>
+                                        ) : child.divider ? (
+                                            <hr className="my-1 mx-3" key={`${menu.key}-divider-${childIndex}`} />
+                                        ) : (
+                                            <Link
+                                                className="collapse-item d-block px-3 py-2"
+                                                to={child.to}
+                                                key={child.to}
+                                                onClick={() => setOpenSubmenuKey(null)} // Close menu on child item click
+                                            >
+                                                {child.text}
+                                            </Link>
+                                        )
+                                    ))}
+                                </div>
+                            </div>
+                        </li>
+                    ))}
+                </ul>
+
+                {/* Account and Upgrade/Logout section at the bottom */}
+                <ul className="nav flex-column sidebar-bottom-section mt-auto">
+                    <li className="nav-item featured-box mb-3 mx-2 text-center">
+                        <img src="/images/credit-card.png" className="img-fluid mb-2" alt="Upgrade" style={{ maxWidth: '70px' }} />
+                        <Link className="btn btn-sm btn-danger w-100" to="/upgrade">Upgrade</Link>
+                    </li>
+                    {accountSettingsItems.map((item) => (
+                        <li className="nav-item" key={item.to}>
+                            <NavLink
+                                className="nav-link d-flex align-items-center"
+                                to={item.to}
+                            >
+                                <i className={`${item.icon} sidebar-icon me-2`}></i>
+                                <span className="nav-link-text">{item.text}</span>
+                            </NavLink>
+                        </li>
+                    ))}
+                    <li className="nav-item logout-section border-top pt-2 mx-2 mt-2">
+                        <button
+                            className="nav-link text-start w-100 d-flex align-items-center"
+                            onClick={handleLogout}
+                            style={{ border: 'none', background: 'transparent' }}
+                        >
+                            <i className="bi-box-arrow-left sidebar-icon me-2"></i>
+                            <span className="nav-link-text">Logout</span>
+                        </button>
                     </li>
                 </ul>
             </div>

@@ -248,3 +248,69 @@ body {
     width: 3em; /* Kích thước switch */
     height: 1.5em;
 }
+/* App.css hoặc Sidebar.css */
+
+/* ... (Các style .sidebar-container, .nav-link, .sidebar-icon-toggle, etc. giữ nguyên) ... */
+
+.submenu-collapse .collapse-inner {
+  border-radius: 0.25rem; /* Bo góc cho khối submenu */
+  /* background-color: #f8f9fa; */ /* Có thể bỏ màu nền này nếu muốn nó giống màu sidebar */
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+  /* ms-3 (margin-left) đã có trong JSX để thụt vào */
+}
+
+.submenu-collapse .collapse-header {
+  font-size: 0.7rem; /* Kích thước chữ cho header */
+  color: #6c757d;   /* Màu xám cho header */
+  text-transform: uppercase;
+  font-weight: 700; /* Đậm hơn một chút */
+  padding-top: 0.75rem; /* Tăng padding trên */
+  padding-bottom: 0.25rem;
+  /* px-3 (padding trái phải) đã có trong JSX */
+  letter-spacing: 0.05em; /* Giãn cách chữ một chút */
+}
+
+.submenu-collapse .collapse-item {
+  font-size: 0.875rem; /* Kích thước chữ cho item con, lớn hơn header chút */
+  color: #495057;      /* Màu chữ tối hơn cho dễ đọc */
+  text-decoration: none;
+  transition: background-color 0.15s ease-in-out, color 0.15s ease-in-out;
+  border-radius: 0.25rem; /* Bo góc cho từng item khi hover/active */
+  /* d-block px-3 py-2 đã có trong JSX */
+  display: block; /* Đảm bảo chiếm toàn bộ chiều rộng */
+  white-space: nowrap; /* Ngăn text xuống dòng không mong muốn */
+  overflow: hidden;
+  text-overflow: ellipsis; /* Hiển thị ... nếu text quá dài */
+}
+
+.submenu-collapse .collapse-item:hover,
+.submenu-collapse .collapse-item:focus { /* Thêm :focus cho accessibility */
+  background-color: #e9ecef; /* Màu nền khi hover/focus, xám nhạt */
+  color: #0d6efd;          /* Màu chữ primary của Bootstrap khi hover/focus */
+  text-decoration: none;   /* Bỏ gạch chân khi hover nếu có */
+}
+
+/* Style cho item đang active (nếu bạn dùng NavLink cho item con và muốn nó có style active) */
+/* Bạn sẽ cần thay <Link> thành <NavLink> cho các item con và thêm logic cho class 'active' */
+.submenu-collapse .collapse-item.active {
+  background-color: #0d6efd; /* Màu primary */
+  color: white;
+  font-weight: 500;
+}
+.submenu-collapse .collapse-item.active:hover { /* Giữ màu khi active và hover */
+    background-color: #0b5ed7; /* Darken primary */
+    color: white;
+}
+
+
+.submenu-collapse hr.my-1 { /* Style cho đường kẻ ngang */
+  border-top-color: #dee2e6; /* Màu viền nhạt hơn */
+}
+
+/* Tùy chỉnh thêm cho icon trong submenu item nếu có */
+.submenu-collapse .collapse-item .bi { /* Giả sử item con cũng có icon */
+  margin-right: 0.5rem;
+  font-size: 0.9rem;
+  vertical-align: middle; /* Căn icon và text tốt hơn */
+}

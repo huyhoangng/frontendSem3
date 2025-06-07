@@ -1,5 +1,5 @@
 // src/services/authService.js
-const API_BASE_URL = 'http://13.229.83.186:5000/api/Auth';
+const API_BASE_URL = 'https://localhost:7166/api/Auth';
 
 // Hàm xử lý response chung (có thể tái sử dụng)
 const handleApiResponse = async (response) => {

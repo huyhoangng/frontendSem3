@@ -18,6 +18,9 @@ import WalletPage from './page/WalletPage';
 import SettingsPage from './page/SettingPage';
 import ProfilePage from './page/ProfilePage';
 import RegisterPage from './page/RegisterPage';
+import TransactionsPage from './page/TransactionPage';
+import GoalsPage from './page/GoalsPage';
+import BudgetPage from './page/BudgetPage';
 
 const MainLayout = () => {
     const location = useLocation();
@@ -70,7 +73,9 @@ function App() {
                     <Route path="/wallet" element={<WalletPage />} />
                     <Route path="/setting" element={<SettingsPage />} />
                     <Route path="/profile" element={<ProfilePage />} />
-                    {/* Các route khác cần layout và xác thực */}
+                    <Route path="/transactions" element={<TransactionsPage />} />
+                    <Route path="/goals" element={<GoalsPage />} />
+                    <Route path="/budgets" element={<BudgetPage />} />
                 </Route>
 
                 {/*
