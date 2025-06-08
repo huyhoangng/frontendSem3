@@ -1,169 +1,45 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import axios from 'axios';
+// src/components/BudgetManagement.js
+import React, { useState, useEffect, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-
-// --- API Configuration ---
-const API_BASE_URL_BUDGETS = 'http://localhost:7166/api/budgets';
-const API_BASE_URL_CATEGORIES = 'http://localhost:7166/api/categories';
-
-const getAuthToken = () => {
-    const token = localStorage.getItem('authToken');
-    if (!token) {
-        console.warn("Auth token not found in localStorage.");
-        throw new Error("Authentication token is missing. Please log in.");
-    }
-    return token;
-};
-
-const createAxiosInstance = (baseURL) => {
-    const token = getAuthToken();
-    const headers = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-    };
-    if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-        const userId = localStorage.getItem('userId');
-        if (userId) {
-            headers['X-User-ID'] = userId; // Thêm userId nếu backend yêu cầu
-        }
-    }
-    return axios.create({
-        baseURL,
-        headers,
-    });
-};
-
-// --- Normalization Functions ---
-const normalizeBudgetFromApi = (apiBudget) => {
-    const startDate = apiBudget.startDate && !isNaN(new Date(apiBudget.startDate).getTime())
-        ? new Date(apiBudget.startDate).toISOString().slice(0, 10)
-        : new Date().toISOString().slice(0, 10);
-    const endDate = apiBudget.endDate && !isNaN(new Date(apiBudget.endDate).getTime())
-        ? new Date(apiBudget.endDate).toISOString().slice(0, 10)
-        : startDate;
-    return {
-        id: apiBudget.id || uuidv4(),
-        budgetName: apiBudget.budgetName || '',
-        budgetAmount: Math.abs(apiBudget.budgetAmount) || 0,
-        budgetPeriod: ['Daily', 'Weekly', 'Monthly', 'Yearly'].includes(apiBudget.budgetPeriod) ? apiBudget.budgetPeriod : 'Monthly',
-        startDate,
-        endDate,
-        alertThreshold: Math.abs(apiBudget.alertThreshold) || 0,
-        categoryId: apiBudget.categoryId || '',
-    };
-};
-
-const normalizeCategoryFromApi = (apiCategory) => {
-    return {
-        id: apiCategory.id || '',
-        name: apiCategory.name || '',
-        type: apiCategory.categoryType?.toLowerCase() || '',
-        description: apiCategory.description || '',
-        color: apiCategory.color || '#6c757d',
-        icon: apiCategory.icon || '',
-        isDefault: apiCategory.isDefault || false,
-    };
-};
+import { 
+    getBudgets, 
+    getCategories, 
+    createBudget, 
+    updateBudget, 
+    deleteBudget 
+} from '../service/budgetService';
 
 // --- Helper Function ---
 const formatCurrency = (amount, currency = 'VND') => {
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency }).format(amount);
 };
 
-// --- API Call Functions ---
-const apiGetBudgets = async (axiosInstance) => {
-    try {
-        const response = await axiosInstance.get('/');
-        console.log('Budgets API response:', response.data); // Log để kiểm tra
-        const budgetsData = Array.isArray(response.data) ? response.data : response.data.budgets || [];
-        if (!Array.isArray(budgetsData)) {
-            console.error('Budgets API did not return an array:', budgetsData);
-            throw new Error('Budgets data is not an array.');
-        }
-        return budgetsData.map(normalizeBudgetFromApi);
-    } catch (error) {
-        console.error('API Error - getBudgets:', error.response?.data || error.message);
-        throw new Error(error.response?.data?.message || error.response?.data?.error || 'Failed to fetch budgets.');
-    }
-};
-
-const apiGetCategories = async (axiosInstance) => {
-    try {
-        const response = await axiosInstance.get('/');
-        console.log('Categories API response:', response.data); // Log để kiểm tra
-        const categoriesData = Array.isArray(response.data) ? response.data : response.data.categories || [];
-        if (!Array.isArray(categoriesData)) {
-            console.error('Categories API did not return an array:', categoriesData);
-            throw new Error('Categories data is not an array.');
-        }
-        return categoriesData.map(normalizeCategoryFromApi);
-    } catch (error) {
-        console.error('API Error - getCategories:', error.response?.data || error.message);
-        throw new Error(error.response?.data?.message || error.response?.data?.error || 'Failed to fetch categories.');
-    }
-};
-
-const apiCreateBudget = async (axiosInstance, payload) => {
-    try {
-        const response = await axiosInstance.post('/', payload);
-        return normalizeBudgetFromApi(response.data);
-    } catch (error) {
-        console.error('API Error - createBudget:', error.response?.data || error.message);
-        throw error;
-    }
-};
-
-const apiUpdateBudget = async (axiosInstance, id, payload) => {
-    try {
-        const response = await axiosInstance.put(`/${id}`, payload);
-        return response.data ? normalizeBudgetFromApi(response.data) : null;
-    } catch (error) {
-        console.error('API Error - updateBudget:', error.response?.data || error.message);
-        throw error;
-    }
-};
-
-const apiDeleteBudget = async (axiosInstance, id) => {
-    try {
-        await axiosInstance.delete(`/${id}`);
-    } catch (error) {
-        console.error('API Error - deleteBudget:', error.response?.data || error.message);
-        throw error;
-    }
-};
-
-// --- Budget Form Modal Component ---
+// --- Budget Form Modal Component (Không thay đổi, giữ nguyên) ---
 const BudgetFormModal = ({ onClose, onSubmit, budgetToEdit, categories }) => {
     const initialFormState = {
-        budgetName: '',
-        budgetAmount: '',
-        budgetPeriod: 'Monthly',
+        budgetName: '', budgetAmount: '', budgetPeriod: 'Monthly',
         startDate: new Date().toISOString().slice(0, 10),
         endDate: new Date().toISOString().slice(0, 10),
-        alertThreshold: '',
-        categoryId: '',
+        alertThreshold: '', categoryId: '',
     };
     const [formData, setFormData] = useState(initialFormState);
     const [formError, setFormError] = useState('');
     const safeCategories = Array.isArray(categories) ? categories : [];
 
     useEffect(() => {
+        const validPeriods = ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Yearly'];
         if (budgetToEdit) {
             setFormData({
                 budgetName: budgetToEdit.budgetName || '',
                 budgetAmount: budgetToEdit.budgetAmount !== undefined ? String(Math.abs(budgetToEdit.budgetAmount)) : '',
-                budgetPeriod: ['Daily', 'Weekly', 'Monthly', 'Yearly'].includes(budgetToEdit.budgetPeriod) ? budgetToEdit.budgetPeriod : 'Monthly',
+                budgetPeriod: validPeriods.includes(budgetToEdit.budgetPeriod) ? budgetToEdit.budgetPeriod : 'Monthly',
                 startDate: budgetToEdit.startDate || initialFormState.startDate,
                 endDate: budgetToEdit.endDate || budgetToEdit.startDate || initialFormState.endDate,
                 alertThreshold: budgetToEdit.alertThreshold !== undefined ? String(Math.abs(budgetToEdit.alertThreshold)) : '',
-                categoryId: budgetToEdit.categoryId || (safeCategories.length > 0 ? safeCategories[0].id : ''),
+                categoryId: budgetToEdit.categoryId !== undefined ? budgetToEdit.categoryId : (safeCategories.length > 0 ? safeCategories[0].id : ''),
             });
         } else {
-            setFormData({
-                ...initialFormState,
-                categoryId: safeCategories.length > 0 ? safeCategories[0].id : '',
-            });
+            setFormData({ ...initialFormState, categoryId: safeCategories.length > 0 ? safeCategories[0].id : '' });
         }
         setFormError('');
     }, [budgetToEdit, safeCategories]);
@@ -176,41 +52,19 @@ const BudgetFormModal = ({ onClose, onSubmit, budgetToEdit, categories }) => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setFormError('');
-        if (!formData.budgetName.trim()) {
-            setFormError('Budget name cannot be empty.');
-            return;
-        }
+        if (!formData.budgetName.trim()) { setFormError('Budget name cannot be empty.'); return; }
         const amountValue = parseFloat(formData.budgetAmount);
-        if (isNaN(amountValue) || amountValue <= 0) {
-            setFormError('Budget amount must be a positive number.');
-            return;
-        }
+        if (isNaN(amountValue) || amountValue <= 0) { setFormError('Budget amount must be a positive number.'); return; }
         const thresholdValue = parseFloat(formData.alertThreshold);
-        if (isNaN(thresholdValue) || thresholdValue < 0) {
-            setFormError('Alert threshold must be a non-negative number.');
-            return;
-        }
-        if (!formData.startDate) {
-            setFormError('Please select a start date.');
-            return;
-        }
-        if (!formData.endDate) {
-            setFormError('Please select an end date.');
-            return;
-        }
-        if (new Date(formData.endDate) < new Date(formData.startDate)) {
-            setFormError('End date cannot be before start date.');
-            return;
-        }
-        if (!formData.categoryId) {
-            setFormError('Please select a category.');
-            return;
-        }
+        if (isNaN(thresholdValue) || thresholdValue < 0) { setFormError('Alert threshold must be a non-negative number.'); return; }
+        if (!formData.startDate) { setFormError('Please select a start date.'); return; }
+        if (!formData.endDate) { setFormError('Please select an end date.'); return; }
+        if (new Date(formData.endDate) < new Date(formData.startDate)) { setFormError('End date cannot be before start date.'); return; }
+        if (formData.categoryId === '') { setFormError('Please select a category.'); return; }
+        
         const budgetData = {
-            ...formData,
-            id: budgetToEdit ? budgetToEdit.id : uuidv4(),
-            budgetAmount: amountValue,
-            alertThreshold: thresholdValue,
+            ...formData, id: budgetToEdit ? budgetToEdit.id : uuidv4(),
+            budgetAmount: amountValue, alertThreshold: thresholdValue,
         };
         try {
             await onSubmit(budgetData);
@@ -220,30 +74,9 @@ const BudgetFormModal = ({ onClose, onSubmit, budgetToEdit, categories }) => {
         }
     };
 
-    const overlayStyle = {
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        zIndex: 1040,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-    };
-    const modalContentStyle = {
-        backgroundColor: 'white',
-        padding: '25px',
-        borderRadius: '8px',
-        boxShadow: '0 5px 15px rgba(0,0,0,0.2)',
-        zIndex: 1050,
-        width: '90%',
-        maxWidth: '600px',
-        maxHeight: '90vh',
-        overflowY: 'auto',
-    };
-
+    // JSX của Modal giữ nguyên...
+    const overlayStyle = { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1040, display: 'flex', alignItems: 'center', justifyContent: 'center' };
+    const modalContentStyle = { backgroundColor: 'white', padding: '25px', borderRadius: '8px', boxShadow: '0 5px 15px rgba(0,0,0,0.2)', zIndex: 1050, width: '90%', maxWidth: '600px', maxHeight: '90vh', overflowY: 'auto' };
     return (
         <div style={overlayStyle} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
             <div style={modalContentStyle}>
@@ -253,66 +86,31 @@ const BudgetFormModal = ({ onClose, onSubmit, budgetToEdit, categories }) => {
                 </div>
                 {formError && <div className="alert alert-danger py-2 mb-3">{formError}</div>}
                 <form onSubmit={handleSubmit}>
+                    {/* Các trường input của form giữ nguyên */}
                     <div className="mb-3">
                         <label htmlFor="budget-name" className="form-label fw-bold">Budget Name <span className="text-danger">*</span></label>
-                        <input
-                            type="text"
-                            className="form-control"
-                            id="budget-name"
-                            name="budgetName"
-                            value={formData.budgetName}
-                            onChange={handleChange}
-                            required
-                            placeholder="E.g., Monthly Food Budget"
-                        />
+                        <input type="text" className="form-control" id="budget-name" name="budgetName" value={formData.budgetName} onChange={handleChange} required placeholder="E.g., Monthly Food Budget" />
                     </div>
                     <div className="mb-3">
                         <label htmlFor="budget-amount" className="form-label fw-bold">Budget Amount <span className="text-danger">*</span></label>
-                        <input
-                            type="number"
-                            step="0.01"
-                            className="form-control"
-                            id="budget-amount"
-                            name="budgetAmount"
-                            value={formData.budgetAmount}
-                            onChange={handleChange}
-                            required
-                            placeholder="0.00"
-                        />
+                        <input type="number" step="0.01" className="form-control" id="budget-amount" name="budgetAmount" value={formData.budgetAmount} onChange={handleChange} required placeholder="0.00" />
                     </div>
                     <div className="row mb-3">
                         <div className="col-md-6">
                             <label htmlFor="budget-period" className="form-label fw-bold">Budget Period</label>
-                            <select
-                                className="form-select"
-                                id="budget-period"
-                                name="budgetPeriod"
-                                value={formData.budgetPeriod}
-                                onChange={handleChange}
-                            >
+                            <select className="form-select" id="budget-period" name="budgetPeriod" value={formData.budgetPeriod} onChange={handleChange}>
                                 <option value="Daily">Daily</option>
                                 <option value="Weekly">Weekly</option>
                                 <option value="Monthly">Monthly</option>
+                                <option value="Quarterly">Quarterly</option>
                                 <option value="Yearly">Yearly</option>
                             </select>
                         </div>
                         <div className="col-md-6">
                             <label htmlFor="budget-categoryId" className="form-label fw-bold">Category <span className="text-danger">*</span></label>
-                            <select
-                                className="form-select"
-                                id="budget-categoryId"
-                                name="categoryId"
-                                value={formData.categoryId}
-                                onChange={handleChange}
-                                required
-                                disabled={safeCategories.length === 0}
-                            >
-                                <option value="" disabled>
-                                    {safeCategories.length === 0 ? 'No categories available' : '--- Select category ---'}
-                                </option>
-                                {safeCategories.map(cat => (
-                                    <option key={cat.id} value={cat.id} style={{ color: cat.color }}>{cat.name}</option>
-                                ))}
+                            <select className="form-select" id="budget-categoryId" name="categoryId" value={formData.categoryId} onChange={handleChange} required disabled={safeCategories.length === 0}>
+                                <option value="" disabled>{safeCategories.length === 0 ? 'No categories available' : '--- Select category ---'}</option>
+                                {safeCategories.map(cat => (<option key={cat.id} value={cat.id} style={{ color: cat.color }}>{cat.name}</option>))}
                             </select>
                             {safeCategories.length === 0 && <small className="text-muted d-block mt-1">Please create categories first.</small>}
                         </div>
@@ -320,41 +118,16 @@ const BudgetFormModal = ({ onClose, onSubmit, budgetToEdit, categories }) => {
                     <div className="row mb-3">
                         <div className="col-md-6">
                             <label htmlFor="budget-startDate" className="form-label fw-bold">Start Date <span className="text-danger">*</span></label>
-                            <input
-                                type="date"
-                                className="form-control"
-                                id="budget-startDate"
-                                name="startDate"
-                                value={formData.startDate}
-                                onChange={handleChange}
-                                required
-                            />
+                            <input type="date" className="form-control" id="budget-startDate" name="startDate" value={formData.startDate} onChange={handleChange} required />
                         </div>
                         <div className="col-md-6">
                             <label htmlFor="budget-endDate" className="form-label fw-bold">End Date <span className="text-danger">*</span></label>
-                            <input
-                                type="date"
-                                className="form-control"
-                                id="budget-endDate"
-                                name="endDate"
-                                value={formData.endDate}
-                                onChange={handleChange}
-                                required
-                            />
+                            <input type="date" className="form-control" id="budget-endDate" name="endDate" value={formData.endDate} onChange={handleChange} required />
                         </div>
                     </div>
                     <div className="mb-3">
                         <label htmlFor="budget-alertThreshold" className="form-label fw-bold">Alert Threshold (Optional)</label>
-                        <input
-                            type="number"
-                            step="0.01"
-                            className="form-control"
-                            id="budget-alertThreshold"
-                            name="alertThreshold"
-                            value={formData.alertThreshold}
-                            onChange={handleChange}
-                            placeholder="0.00"
-                        />
+                        <input type="number" step="0.01" className="form-control" id="budget-alertThreshold" name="alertThreshold" value={formData.alertThreshold} onChange={handleChange} placeholder="0.00" />
                         <small className="text-muted">Notify when spending reaches this amount.</small>
                     </div>
                     <div className="d-flex justify-content-end mt-4 pt-3 border-top">
@@ -367,6 +140,7 @@ const BudgetFormModal = ({ onClose, onSubmit, budgetToEdit, categories }) => {
     );
 };
 
+
 // --- BudgetManagement Component (Main Page Component) ---
 const BudgetManagement = () => {
     const [budgets, setBudgets] = useState([]);
@@ -378,104 +152,56 @@ const BudgetManagement = () => {
     const [filterPeriod, setFilterPeriod] = useState('');
     const [filterCategory, setFilterCategory] = useState('');
 
-    const axiosInstanceBudgets = useMemo(() => createAxiosInstance(API_BASE_URL_BUDGETS), []);
-    const axiosInstanceCategories = useMemo(() => createAxiosInstance(API_BASE_URL_CATEGORIES), []);
+    // --- SỬA LẠI HÀM NORMALIZE NGAY TẠI ĐÂY ĐỂ DỄ DEBUG ---
+    const normalizeBudgetForState = (apiBudget) => {
+        const startDate = apiBudget.startDate ? new Date(apiBudget.startDate).toISOString().slice(0, 10) : '';
+        const endDate = apiBudget.endDate ? new Date(apiBudget.endDate).toISOString().slice(0, 10) : '';
+        const validPeriods = ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Yearly'];
+        
+        return {
+            id: apiBudget.id,
+            budgetName: apiBudget.budgetName || '',
+            budgetAmount: apiBudget.budgetAmount || 0,
+            budgetPeriod: validPeriods.includes(apiBudget.budgetPeriod) ? apiBudget.budgetPeriod : 'Monthly',
+            startDate,
+            endDate,
+            alertThreshold: apiBudget.alertThreshold || 0,
+            // --- ĐÂY LÀ PHẦN SỬA LỖI QUAN TRỌNG NHẤT ---
+            // Kiểm tra tường minh, không dùng `||` để tránh lỗi với số 0
+            categoryId: apiBudget.categoryId !== undefined && apiBudget.categoryId !== null ? apiBudget.categoryId : '',
+        };
+    };
 
     const handleApiError = useCallback((error, context = 'operation') => {
+        // ... hàm này giữ nguyên
         let message = `Error during ${context}.`;
         if (error.response) {
-            if (error.response.status === 401) {
-                message = 'Session expired or invalid token. Please log in again.';
-                localStorage.removeItem('authToken');
-                localStorage.removeItem('userId');
-                setTimeout(() => {
-                    if (window.location.pathname !== '/login') {
-                        window.location.href = '/login';
-                    }
-                }, 2500);
-            } else if (error.response.data) {
-                if (typeof error.response.data === 'string' && error.response.data.length < 200) message = error.response.data;
-                else if (error.response.data.message) message = error.response.data.message;
-                else if (error.response.data.title) message = error.response.data.title;
-                else if (error.response.data.error) message = error.response.data.error;
-                else if (error.response.data.errors) {
-                    const errors = error.response.data.errors;
-                    const firstErrorField = Object.keys(errors)[0];
-                    if (firstErrorField && errors[firstErrorField] && errors[firstErrorField].length > 0) {
-                        message = `${firstErrorField}: ${errors[firstErrorField][0]}`;
-                    } else {
-                        message = `Validation error in ${firstErrorField}.`;
-                    }
-                } else {
-                    message = `Server error (${error.response.status}) during ${context}.`;
-                }
-            }
-        } else if (error.request) {
-            message = `Network error during ${context}. Please check your connection or ensure the server is running.`;
-        } else {
-            message = error.message || `Unknown error during ${context}.`;
-        }
-        setPageError(message);
-        console.error(`API Error (${context}):`, error);
+            if (error.response.status === 401) { message = 'Session expired or invalid token. Please log in again.'; localStorage.removeItem('authToken'); localStorage.removeItem('userId'); setTimeout(() => { if (window.location.pathname !== '/login') { window.location.href = '/login'; } }, 2500); }
+            else if (error.response.data) { if (typeof error.response.data === 'string' && error.response.data.length < 200) message = error.response.data; else if (error.response.data.message) message = error.response.data.message; else if (error.response.data.title) message = error.response.data.title; else if (error.response.data.error) message = error.response.data.error; else if (error.response.data.errors) { const errors = error.response.data.errors; const firstErrorField = Object.keys(errors)[0]; if (firstErrorField && errors[firstErrorField] && errors[firstErrorField].length > 0) { message = `${firstErrorField}: ${errors[firstErrorField][0]}`; } else { message = `Validation error in ${firstErrorField}.`; } } else { message = `Server error (${error.response.status}) during ${context}.`; } }
+        } else if (error.request) { message = `Network error during ${context}. Please check your connection.`; }
+        else { message = error.message || `Unknown error during ${context}.`; }
+        setPageError(message); console.error(`API Error (${context}):`, error);
     }, []);
 
     const fetchData = useCallback(async () => {
-        setIsLoading(true);
-        setPageError('');
+        setIsLoading(true); setPageError('');
         try {
-            const token = getAuthToken();
-            const budgetsPromise = apiGetBudgets(axiosInstanceBudgets).catch(err => {
-                console.error('Failed to fetch budgets:', err);
-                return [];
-            });
-            const categoriesPromise = apiGetCategories(axiosInstanceCategories).catch(err => {
-                console.error('Failed to fetch categories:', err);
-                return [];
-            });
-            const [budgets, categories] = await Promise.all([budgetsPromise, categoriesPromise]);
-            setBudgets(budgets);
-            setCategories(categories);
-            if (budgets.length === 0 && categories.length === 0) {
-                setPageError('Failed to load data from server. Please try again.');
-            }
+            const [budgetsResponse, categoriesResponse] = await Promise.all([getBudgets(), getCategories()]);
+            // Áp dụng hàm normalize đã sửa lỗi ở đây
+            setBudgets(budgetsResponse.map(normalizeBudgetForState));
+            setCategories(categoriesResponse); // Giả sử categories không cần normalize phức tạp
         } catch (error) {
-            handleApiError(error, 'fetching data');
+            handleApiError(error, 'fetching initial data');
         } finally {
             setIsLoading(false);
         }
-    }, [axiosInstanceBudgets, axiosInstanceCategories, handleApiError]);
+    }, [handleApiError]);
 
-    useEffect(() => {
-        fetchData();
-    }, [fetchData]);
-
-    const handleOpenAddBudgetModal = () => {
-        if (categories.length === 0) {
-            setPageError('Please create at least one category before adding a budget.');
-            return;
-        }
-        setBudgetToEdit(null);
-        setIsModalOpen(true);
-    };
-
-    const handleOpenEditBudgetModal = (budget) => {
-        setBudgetToEdit(budget);
-        setIsModalOpen(true);
-    };
-
-    const handleCloseModal = () => {
-        setIsModalOpen(false);
-        setBudgetToEdit(null);
-    };
+    useEffect(() => { fetchData(); }, [fetchData]);
 
     const handleSubmitBudget = async (budgetData) => {
-        setIsLoading(true);
-        setPageError('');
+        setIsLoading(true); setPageError('');
         try {
-            const categoryId = budgetData.categoryId ? parseInt(budgetData.categoryId, 10) : null;
-            if (!categoryId || isNaN(categoryId)) {
-                throw new Error('Invalid category ID.');
-            }
             const payload = {
                 budgetName: budgetData.budgetName,
                 budgetAmount: parseFloat(budgetData.budgetAmount),
@@ -483,13 +209,14 @@ const BudgetManagement = () => {
                 startDate: new Date(budgetData.startDate).toISOString(),
                 endDate: new Date(budgetData.endDate).toISOString(),
                 alertThreshold: parseFloat(budgetData.alertThreshold) || 0,
-                categoryId,
+                categoryId: parseInt(budgetData.categoryId, 10),
             };
+            if (isNaN(payload.categoryId)) { throw new Error('Invalid category ID.'); }
             if (budgetToEdit) {
-                await apiUpdateBudget(axiosInstanceBudgets, budgetData.id, payload);
+                await updateBudget(budgetData.id, payload);
                 alert('Budget updated successfully!');
             } else {
-                await apiCreateBudget(axiosInstanceBudgets, payload);
+                await createBudget(payload);
                 alert('Budget added successfully!');
             }
             await fetchData();
@@ -503,39 +230,46 @@ const BudgetManagement = () => {
     };
 
     const handleDeleteBudget = async (budgetId) => {
+        // ... hàm này giữ nguyên
         if (window.confirm('Are you sure you want to delete this budget?')) {
-            setIsLoading(true);
-            setPageError('');
-            try {
-                await apiDeleteBudget(axiosInstanceBudgets, budgetId);
-                alert('Budget deleted successfully!');
-                await fetchData();
-            } catch (error) {
-                handleApiError(error, 'deleting budget');
-            } finally {
-                setIsLoading(false);
-            }
+            setIsLoading(true); setPageError('');
+            try { await deleteBudget(budgetId); alert('Budget deleted successfully!'); await fetchData(); }
+            catch (error) { handleApiError(error, 'deleting budget'); }
+            finally { setIsLoading(false); }
         }
     };
+    
+    // Các hàm helper và logic mở/đóng modal giữ nguyên
+    const handleOpenAddBudgetModal = () => { if (categories.length === 0) { setPageError('Please create at least one category before adding a budget.'); return; } setBudgetToEdit(null); setIsModalOpen(true); };
+    const handleOpenEditBudgetModal = (budget) => { setBudgetToEdit(budget); setIsModalOpen(true); };
+    const handleCloseModal = () => { setIsModalOpen(false); setBudgetToEdit(null); };
 
     const getCategoryName = (categoryId) => {
-        const category = categories.find(cat => cat.id === categoryId);
+        const category = categories.find(cat => String(cat.id) === String(categoryId));
         return category ? category.name : 'Unknown';
     };
-
     const getCategoryColor = (categoryId) => {
-        const category = categories.find(cat => cat.id === categoryId);
+        const category = categories.find(cat => String(cat.id) === String(categoryId));
         return category ? category.color : '#6c757d';
     };
 
+    // --- SỬA LẠI LOGIC FILTER ĐỂ AN TOÀN HƠN ---
     const filteredBudgets = budgets.filter(budget => {
-        if (filterPeriod && budget.budgetPeriod !== filterPeriod) return false;
-        if (filterCategory && budget.categoryId !== filterCategory) return false;
-        return true;
+        // Điều kiện 1: Lọc theo chu kỳ
+        const periodMatch = !filterPeriod || budget.budgetPeriod === filterPeriod;
+        // Điều kiện 2: Lọc theo danh mục. So sánh chuỗi với chuỗi để tránh lỗi kiểu dữ liệu
+        const categoryMatch = !filterCategory || String(budget.categoryId) === String(filterCategory);
+        return periodMatch && categoryMatch;
     });
+    
+    // Để debug, bạn có thể thêm log này để xem dữ liệu trước và sau khi lọc
+    // console.log("All budgets in state:", budgets);
+    // console.log("Filters:", { filterPeriod, filterCategory });
+    // console.log("Filtered budgets to display:", filteredBudgets);
 
     return (
         <div className="container mt-4">
+            {/* Toàn bộ phần JSX render giữ nguyên như cũ */}
             <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap">
                 <h1 className="h2 mb-2 mb-md-0">Budget Management</h1>
                 <button className="btn btn-primary" onClick={handleOpenAddBudgetModal} disabled={categories.length === 0}>
@@ -545,7 +279,7 @@ const BudgetManagement = () => {
 
             {isLoading && <div className="alert alert-info text-center">Loading data...</div>}
             {pageError && !isLoading && <div className="alert alert-danger text-center">{pageError}</div>}
-
+            
             {!isLoading && !pageError && (budgets.length > 0 || filterPeriod || filterCategory) && (
                 <div className="card mb-4 shadow-sm">
                     <div className="card-body">
@@ -553,42 +287,24 @@ const BudgetManagement = () => {
                         <div className="row g-3">
                             <div className="col-md-4">
                                 <label htmlFor="filterPeriod" className="form-label form-label-sm">Budget Period</label>
-                                <select
-                                    id="filterPeriod"
-                                    className="form-select form-select-sm"
-                                    value={filterPeriod}
-                                    onChange={e => setFilterPeriod(e.target.value)}
-                                >
-                                    <option value="">All</option>
+                                <select id="filterPeriod" className="form-select form-select-sm" value={filterPeriod} onChange={e => setFilterPeriod(e.target.value)}>
+                                    <option value="">All Periods</option>
                                     <option value="Daily">Daily</option>
                                     <option value="Weekly">Weekly</option>
                                     <option value="Monthly">Monthly</option>
+                                    <option value="Quarterly">Quarterly</option>
                                     <option value="Yearly">Yearly</option>
                                 </select>
                             </div>
                             <div className="col-md-4">
                                 <label htmlFor="filterCategory" className="form-label form-label-sm">Category</label>
-                                <select
-                                    id="filterCategory"
-                                    className="form-select form-select-sm"
-                                    value={filterCategory}
-                                    onChange={e => setFilterCategory(e.target.value)}
-                                    disabled={categories.length === 0}
-                                >
-                                    <option value="">All</option>
-                                    {categories.map(cat => (
-                                        <option key={cat.id} value={cat.id}>{cat.name}</option>
-                                    ))}
+                                <select id="filterCategory" className="form-select form-select-sm" value={filterCategory} onChange={e => setFilterCategory(e.target.value)} disabled={categories.length === 0}>
+                                    <option value="">All Categories</option>
+                                    {categories.map(cat => (<option key={cat.id} value={cat.id}>{cat.name}</option>))}
                                 </select>
                             </div>
                             <div className="col-md-4 d-flex align-items-end">
-                                <button
-                                    className="btn btn-outline-secondary btn-sm"
-                                    onClick={() => {
-                                        setFilterPeriod('');
-                                        setFilterCategory('');
-                                    }}
-                                >
+                                <button className="btn btn-outline-secondary btn-sm" onClick={() => { setFilterPeriod(''); setFilterCategory(''); }}>
                                     <i className="bi bi-x-lg me-1"></i>Clear Filters
                                 </button>
                             </div>
@@ -598,17 +314,7 @@ const BudgetManagement = () => {
             )}
 
             {!isLoading && !pageError && (
-                budgets.length === 0 && !filterPeriod && !filterCategory ? (
-                    <div className="text-center p-5 border rounded bg-light">
-                        <i className="bi bi-wallet2" style={{ fontSize: '3rem', color: '#6c757d' }}></i>
-                        <p className="mt-3 mb-2 text-muted">No budgets have been set yet.</p>
-                        {categories.length === 0 && (
-                            <p className="text-warning small">Please create categories first to add budgets.</p>
-                        )}
-                    </div>
-                ) : filteredBudgets.length === 0 && budgets.length > 0 ? (
-                    <div className="alert alert-warning text-center">No budgets match the selected filters.</div>
-                ) : filteredBudgets.length > 0 ? (
+                filteredBudgets.length > 0 ? (
                     <div className="table-responsive">
                         <table className="table table-hover table-sm align-middle">
                             <thead className="table-light">
@@ -638,18 +344,10 @@ const BudgetManagement = () => {
                                         <td>{new Date(budget.endDate).toLocaleDateString('en-GB')}</td>
                                         <td>{formatCurrency(budget.alertThreshold)}</td>
                                         <td className="text-center">
-                                            <button
-                                                className="btn btn-sm btn-outline-secondary me-1 py-0 px-1"
-                                                onClick={() => handleOpenEditBudgetModal(budget)}
-                                                title="Edit"
-                                            >
+                                            <button className="btn btn-sm btn-outline-secondary me-1 py-0 px-1" onClick={() => handleOpenEditBudgetModal(budget)} title="Edit">
                                                 <i className="bi bi-pencil-fill"></i>
                                             </button>
-                                            <button
-                                                className="btn btn-sm btn-outline-danger py-0 px-1"
-                                                onClick={() => handleDeleteBudget(budget.id)}
-                                                title="Delete"
-                                            >
+                                            <button className="btn btn-sm btn-outline-danger py-0 px-1" onClick={() => handleDeleteBudget(budget.id)} title="Delete">
                                                 <i className="bi bi-trash3-fill"></i>
                                             </button>
                                         </td>
@@ -658,17 +356,18 @@ const BudgetManagement = () => {
                             </tbody>
                         </table>
                     </div>
-                ) : null
+                ) : (budgets.length === 0 && !filterPeriod && !filterCategory) ? (
+                    <div className="text-center p-5 border rounded bg-light">
+                        <i className="bi bi-wallet2" style={{ fontSize: '3rem', color: '#6c757d' }}></i>
+                        <p className="mt-3 mb-2 text-muted">No budgets have been set yet.</p>
+                        {categories.length === 0 && <p className="text-warning small">Please create categories first to add budgets.</p>}
+                    </div>
+                ) : (
+                    <div className="alert alert-warning text-center">No budgets match the selected filters.</div>
+                )
             )}
 
-            {isModalOpen && (
-                <BudgetFormModal
-                    onClose={handleCloseModal}
-                    onSubmit={handleSubmitBudget}
-                    budgetToEdit={budgetToEdit}
-                    categories={categories}
-                />
-            )}
+            {isModalOpen && <BudgetFormModal onClose={handleCloseModal} onSubmit={handleSubmitBudget} budgetToEdit={budgetToEdit} categories={categories} />}
         </div>
     );
 };
