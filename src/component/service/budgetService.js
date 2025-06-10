@@ -1,123 +1,173 @@
-// src/services/budgetService.js
+// src/component/service/budgetService.js
 import axios from 'axios';
 
-// --- Cấu hình cơ bản ---
-const API_BASE_URL = 'https://localhost:7166/api'; // Sử dụng HTTPS
+const API_BASE_URL = 'https://localhost:7166/api/budgets';
 
-// --- Hàm trợ giúp lấy Token và tạo Axios Instance ---
 const getAuthToken = () => {
     const token = localStorage.getItem('authToken');
     if (!token) {
-        console.warn("Auth token not found in localStorage.");
-        throw new Error("Authentication token is missing. Please log in.");
+        throw new Error('No valid authentication token found. Please log in.');
     }
     return token;
 };
 
-const createApiClient = (resourcePath) => {
-    try {
-        const token = getAuthToken();
-        const headers = {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Authorization': `Bearer ${token}`,
-        };
-        
-        const userId = localStorage.getItem('userId');
-        if (userId) {
-            headers['X-User-ID'] = userId;
-        }
-
-        return axios.create({
-            baseURL: `${API_BASE_URL}/${resourcePath}`,
-            headers,
-        });
-    } catch (error) {
-        console.error("Could not create authenticated API client:", error.message);
-        return axios.create({
-            baseURL: `${API_BASE_URL}/${resourcePath}`,
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-            }
-        });
-    }
-};
-
-const budgetApiClient = createApiClient('budgets');
-const categoryApiClient = createApiClient('categories');
-
-
-// --- Các hàm chuẩn hóa dữ liệu (private cho module này) ---
+// Helper function to normalize budget data from API
 const normalizeBudgetFromApi = (apiBudget) => {
-    const startDate = apiBudget.startDate && !isNaN(new Date(apiBudget.startDate).getTime())
-        ? new Date(apiBudget.startDate).toISOString().slice(0, 10)
-        : new Date().toISOString().slice(0, 10);
-    const endDate = apiBudget.endDate && !isNaN(new Date(apiBudget.endDate).getTime())
-        ? new Date(apiBudget.endDate).toISOString().slice(0, 10)
-        : startDate;
-
-    // --- THAY ĐỔI / THÊM MỚI ---
-    // Thêm 'Quarterly' vào danh sách các chu kỳ hợp lệ
-    const validPeriods = ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Yearly'];
-    
     return {
-        id: apiBudget.id,
-        budgetName: apiBudget.budgetName || '',
-        budgetAmount: Math.abs(apiBudget.budgetAmount) || 0,
-        budgetPeriod: validPeriods.includes(apiBudget.budgetPeriod) 
-            ? apiBudget.budgetPeriod 
-            : 'Monthly', // Mặc định nếu API trả về giá trị không hợp lệ
-        startDate,
-        endDate,
-        alertThreshold: Math.abs(apiBudget.alertThreshold) || 0,
-        categoryId: apiBudget.categoryId || '',
+        id: apiBudget.budgetId,
+        budgetName: apiBudget.budgetName,
+        budgetAmount: apiBudget.budgetAmount,
+        budgetPeriod: apiBudget.budgetPeriod,
+        startDate: apiBudget.startDate,
+        endDate: apiBudget.endDate,
+        spentAmount: apiBudget.spentAmount,
+        alertThreshold: apiBudget.alertThreshold,
+        isActive: apiBudget.isActive,
+        categoryId: apiBudget.categoryId
     };
 };
 
-const normalizeCategoryFromApi = (apiCategory) => {
+// Helper function to normalize budget data for API
+const normalizeBudgetForApi = (budgetData) => {
     return {
-        id: apiCategory.id,
-        name: apiCategory.name || '',
-        type: apiCategory.categoryType?.toLowerCase() || '',
-        description: apiCategory.description || '',
-        color: apiCategory.color || '#6c757d',
-        icon: apiCategory.icon || '',
-        isDefault: apiCategory.isDefault || false,
+        budgetName: budgetData.budgetName,
+        budgetAmount: budgetData.budgetAmount,
+        budgetPeriod: budgetData.budgetPeriod,
+        startDate: budgetData.startDate,
+        endDate: budgetData.endDate,
+        alertThreshold: budgetData.alertThreshold,
+        categoryId: budgetData.categoryId,
+        isActive: true
     };
 };
 
+const apiClient = axios.create({
+    baseURL: API_BASE_URL,
+    headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+    }
+});
 
-// --- Các hàm gọi API được EXPORT ra ngoài ---
+apiClient.interceptors.request.use(
+    config => {
+        const token = getAuthToken();
+        if (token) {
+            config.headers['Authorization'] = `Bearer ${token}`;
+        }
+        return config;
+    },
+    error => {
+        return Promise.reject(error);
+    }
+);
 
 export const getBudgets = async () => {
-    const response = await budgetApiClient.get('/');
-    const budgetsData = Array.isArray(response.data) ? response.data : response.data.budgets || [];
-    if (!Array.isArray(budgetsData)) {
-        throw new Error('Budgets data from API is not an array.');
+    try {
+        const response = await apiClient.get('/');
+        const budgetsData = Array.isArray(response.data) ? response.data : [];
+        return budgetsData
+            .filter(budget => budget.isActive)
+            .map(normalizeBudgetFromApi);
+    } catch (error) {
+        console.error("API Error - getBudgets:", error.response?.data || error.message);
+        throw error;
     }
-    return budgetsData.map(normalizeBudgetFromApi);
 };
 
-export const getCategories = async () => {
-    const response = await categoryApiClient.get('/');
-    const categoriesData = Array.isArray(response.data) ? response.data : response.data.categories || [];
-    if (!Array.isArray(categoriesData)) {
-        throw new Error('Categories data from API is not an array.');
+export const createBudget = async (budgetData) => {
+    try {
+        const apiPayload = normalizeBudgetForApi(budgetData);
+        const response = await apiClient.post('/', apiPayload);
+        return normalizeBudgetFromApi(response.data);
+    } catch (error) {
+        console.error("API Error - createBudget:", error.response?.data || error.message);
+        throw error;
     }
-    return categoriesData.map(normalizeCategoryFromApi);
 };
 
-export const createBudget = async (payload) => {
-    const response = await budgetApiClient.post('/', payload);
-    return normalizeBudgetFromApi(response.data);
+export const updateBudget = async (budgetId, budgetData) => {
+    if (!budgetId) {
+        throw new Error('Budget ID is required for update');
+    }
+
+    try {
+        // Log the update attempt
+        console.log(`Attempting to update budget ${budgetId}:`, budgetData);
+
+        const apiPayload = normalizeBudgetForApi(budgetData);
+        const response = await apiClient.put(`/${budgetId}`, apiPayload);
+
+        // Log successful update
+        console.log(`Successfully updated budget ${budgetId}:`, response.data);
+
+        return normalizeBudgetFromApi(response.data);
+    } catch (error) {
+        // Enhanced error logging
+        if (error.response) {
+            console.error(`API Error - updateBudget(${budgetId}):`, {
+                status: error.response.status,
+                data: error.response.data,
+                headers: error.response.headers
+            });
+
+            // Handle specific error cases
+            if (error.response.status === 404) {
+                throw new Error(`Budget with ID ${budgetId} not found`);
+            } else if (error.response.status === 400) {
+                throw new Error(`Invalid budget data: ${error.response.data?.message || 'Please check your input'}`);
+            } else if (error.response.status === 401) {
+                throw new Error('Your session has expired. Please log in again.');
+            }
+        }
+        throw error;
+    }
 };
 
-export const updateBudget = async (id, payload) => {
-    const response = await budgetApiClient.put(`/${id}`, payload);
-    return response.data ? normalizeBudgetFromApi(response.data) : null;
-};
+export const deleteBudget = async (budgetId) => {
+    if (!budgetId) {
+        throw new Error('Budget ID is required for deletion');
+    }
 
-export const deleteBudget = async (id) => {
-    await budgetApiClient.delete(`/${id}`);
+    try {
+        // Log the delete attempt
+        console.log(`Attempting to delete budget ${budgetId}`);
+
+        // First, verify the budget exists
+        try {
+            await apiClient.get(`/${budgetId}`);
+        } catch (error) {
+            if (error.response?.status === 404) {
+                throw new Error(`Budget with ID ${budgetId} not found`);
+            }
+            throw error;
+        }
+
+        // Proceed with deletion
+        const response = await apiClient.delete(`/${budgetId}`);
+
+        // Log successful deletion
+        console.log(`Successfully deleted budget ${budgetId}`);
+
+        return response.data;
+    } catch (error) {
+        // Enhanced error logging
+        if (error.response) {
+            console.error(`API Error - deleteBudget(${budgetId}):`, {
+                status: error.response.status,
+                data: error.response.data,
+                headers: error.response.headers
+            });
+
+            // Handle specific error cases
+            if (error.response.status === 404) {
+                throw new Error(`Budget with ID ${budgetId} not found`);
+            } else if (error.response.status === 401) {
+                throw new Error('Your session has expired. Please log in again.');
+            } else if (error.response.status === 403) {
+                throw new Error('You do not have permission to delete this budget');
+            }
+        }
+        throw error;
+    }
 };

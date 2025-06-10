@@ -1,147 +1,393 @@
 // src/components/BudgetManagement.js
 import React, { useState, useEffect, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { 
-    getBudgets, 
-    getCategories, 
-    createBudget, 
-    updateBudget, 
-    deleteBudget 
-} from '../service/budgetService';
+import { getBudgets, createBudget, updateBudget, deleteBudget } from '../service/budgetService';
+import { getCategories } from '../service/categoryService';
+import { getAccounts } from '../service/accountService';
 
-// --- Helper Function ---
 const formatCurrency = (amount, currency = 'VND') => {
+    if (typeof amount !== 'number') return '';
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency }).format(amount);
 };
 
-// --- Budget Form Modal Component (Không thay đổi, giữ nguyên) ---
-const BudgetFormModal = ({ onClose, onSubmit, budgetToEdit, categories }) => {
-    const initialFormState = {
-        budgetName: '', budgetAmount: '', budgetPeriod: 'Monthly',
-        startDate: new Date().toISOString().slice(0, 10),
-        endDate: new Date().toISOString().slice(0, 10),
-        alertThreshold: '', categoryId: '',
+const formatDate = (dateString) => {
+    if (!dateString) return '';
+    return new Date(dateString).toLocaleDateString('en-GB');
+};
+
+const normalizeBudgetForState = (apiBudget) => {
+    return {
+        id: apiBudget.budgetId,
+        budgetName: apiBudget.budgetName,
+        budgetAmount: apiBudget.budgetAmount,
+        budgetPeriod: apiBudget.budgetPeriod,
+        startDate: apiBudget.startDate,
+        endDate: apiBudget.endDate,
+        spentAmount: apiBudget.spentAmount,
+        alertThreshold: apiBudget.alertThreshold,
+        isActive: apiBudget.isActive,
+        categoryId: apiBudget.categoryId
     };
-    const [formData, setFormData] = useState(initialFormState);
-    const [formError, setFormError] = useState('');
-    const safeCategories = Array.isArray(categories) ? categories : [];
+};
+
+const BudgetFormModal = ({ onClose, onSubmit, budgetToEdit, categories }) => {
+    const [formData, setFormData] = useState({
+        budgetName: '',
+        budgetAmount: '',
+        budgetPeriod: 'Monthly', // Set default to Monthly
+        startDate: '',
+        endDate: '',
+        alertThreshold: 80,
+        categoryId: ''
+    });
+    const [errors, setErrors] = useState({});
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
-        const validPeriods = ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Yearly'];
         if (budgetToEdit) {
             setFormData({
-                budgetName: budgetToEdit.budgetName || '',
-                budgetAmount: budgetToEdit.budgetAmount !== undefined ? String(Math.abs(budgetToEdit.budgetAmount)) : '',
-                budgetPeriod: validPeriods.includes(budgetToEdit.budgetPeriod) ? budgetToEdit.budgetPeriod : 'Monthly',
-                startDate: budgetToEdit.startDate || initialFormState.startDate,
-                endDate: budgetToEdit.endDate || budgetToEdit.startDate || initialFormState.endDate,
-                alertThreshold: budgetToEdit.alertThreshold !== undefined ? String(Math.abs(budgetToEdit.alertThreshold)) : '',
-                categoryId: budgetToEdit.categoryId !== undefined ? budgetToEdit.categoryId : (safeCategories.length > 0 ? safeCategories[0].id : ''),
+                id: budgetToEdit.id,
+                budgetName: budgetToEdit.budgetName,
+                budgetAmount: budgetToEdit.budgetAmount,
+                budgetPeriod: budgetToEdit.budgetPeriod,
+                startDate: budgetToEdit.startDate ? new Date(budgetToEdit.startDate).toISOString().split('T')[0] : '',
+                endDate: budgetToEdit.endDate ? new Date(budgetToEdit.endDate).toISOString().split('T')[0] : '',
+                alertThreshold: budgetToEdit.alertThreshold,
+                categoryId: budgetToEdit.categoryId.toString()
             });
         } else {
-            setFormData({ ...initialFormState, categoryId: safeCategories.length > 0 ? safeCategories[0].id : '' });
+            // Set default values for new budget
+            const today = new Date();
+            const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+            
+            setFormData({
+                budgetName: '',
+                budgetAmount: '',
+                budgetPeriod: 'Monthly',
+                startDate: today.toISOString().split('T')[0],
+                endDate: endOfMonth.toISOString().split('T')[0],
+                alertThreshold: 80,
+                categoryId: ''
+            });
         }
-        setFormError('');
-    }, [budgetToEdit, safeCategories]);
+    }, [budgetToEdit]);
 
-    const handleChange = (e) => {
-        const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
+    const validateForm = () => {
+        const newErrors = {};
+        
+        // Validate budgetName
+        if (!formData.budgetName.trim()) {
+            newErrors.budgetName = 'Budget name is required';
+        }
+
+        // Validate budgetAmount
+        if (!formData.budgetAmount) {
+            newErrors.budgetAmount = 'Budget amount is required';
+        } else if (isNaN(formData.budgetAmount) || parseFloat(formData.budgetAmount) <= 0) {
+            newErrors.budgetAmount = 'Budget amount must be a positive number';
+        }
+
+        // Validate budgetPeriod
+        const validPeriods = ['Weekly', 'Monthly', 'Quarterly', 'Yearly'];
+        if (!formData.budgetPeriod) {
+            newErrors.budgetPeriod = 'Budget period is required';
+        } else if (!validPeriods.includes(formData.budgetPeriod)) {
+            newErrors.budgetPeriod = 'Budget period must be one of: Weekly, Monthly, Quarterly, Yearly';
+        }
+
+        // Validate dates
+        if (!formData.startDate) {
+            newErrors.startDate = 'Start date is required';
+        }
+        if (!formData.endDate) {
+            newErrors.endDate = 'End date is required';
+        }
+        if (formData.startDate && formData.endDate) {
+            const start = new Date(formData.startDate);
+            const end = new Date(formData.endDate);
+            if (start > end) {
+                newErrors.endDate = 'End date must be after start date';
+            }
+        }
+
+        // Validate alertThreshold
+        if (formData.alertThreshold) {
+            const threshold = parseFloat(formData.alertThreshold);
+            if (isNaN(threshold) || threshold < 0 || threshold > 100) {
+                newErrors.alertThreshold = 'Alert threshold must be between 0 and 100';
+            }
+        }
+
+        // Validate category
+        if (!formData.categoryId) {
+            newErrors.categoryId = 'Category is required';
+        }
+
+        setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setFormError('');
-        if (!formData.budgetName.trim()) { setFormError('Budget name cannot be empty.'); return; }
-        const amountValue = parseFloat(formData.budgetAmount);
-        if (isNaN(amountValue) || amountValue <= 0) { setFormError('Budget amount must be a positive number.'); return; }
-        const thresholdValue = parseFloat(formData.alertThreshold);
-        if (isNaN(thresholdValue) || thresholdValue < 0) { setFormError('Alert threshold must be a non-negative number.'); return; }
-        if (!formData.startDate) { setFormError('Please select a start date.'); return; }
-        if (!formData.endDate) { setFormError('Please select an end date.'); return; }
-        if (new Date(formData.endDate) < new Date(formData.startDate)) { setFormError('End date cannot be before start date.'); return; }
-        if (formData.categoryId === '') { setFormError('Please select a category.'); return; }
-        
-        const budgetData = {
-            ...formData, id: budgetToEdit ? budgetToEdit.id : uuidv4(),
-            budgetAmount: amountValue, alertThreshold: thresholdValue,
-        };
+        if (!validateForm()) {
+            return;
+        }
+
+        setIsSubmitting(true);
         try {
-            await onSubmit(budgetData);
+            const payload = {
+                budgetName: formData.budgetName.trim(),
+                budgetAmount: parseFloat(formData.budgetAmount),
+                budgetPeriod: formData.budgetPeriod,
+                startDate: new Date(formData.startDate).toISOString(),
+                endDate: new Date(formData.endDate).toISOString(),
+                alertThreshold: parseFloat(formData.alertThreshold),
+                categoryId: parseInt(formData.categoryId, 10)
+            };
+
+            await onSubmit(payload);
             onClose();
-        } catch (err) {
-            setFormError(err.message || 'Error submitting form.');
+        } catch (error) {
+            console.error('Error submitting budget:', error);
+            setErrors({
+                submit: error.message || 'Failed to save budget. Please try again.'
+            });
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
-    // JSX của Modal giữ nguyên...
-    const overlayStyle = { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1040, display: 'flex', alignItems: 'center', justifyContent: 'center' };
-    const modalContentStyle = { backgroundColor: 'white', padding: '25px', borderRadius: '8px', boxShadow: '0 5px 15px rgba(0,0,0,0.2)', zIndex: 1050, width: '90%', maxWidth: '600px', maxHeight: '90vh', overflowY: 'auto' };
+    const handleChange = (e) => {
+        const { name, value, type } = e.target;
+        
+        // Special handling for budgetPeriod
+        if (name === 'budgetPeriod') {
+            const validPeriods = ['Weekly', 'Monthly', 'Quarterly', 'Yearly'];
+            if (!validPeriods.includes(value)) {
+                setErrors(prev => ({
+                    ...prev,
+                    budgetPeriod: 'Please select a valid period: Weekly, Monthly, Quarterly, or Yearly'
+                }));
+                return;
+            }
+        }
+
+        setFormData(prev => ({
+            ...prev,
+            [name]: type === 'number' ? (value === '' ? '' : parseFloat(value)) : value
+        }));
+        
+        // Clear error when user starts typing
+        if (errors[name]) {
+            setErrors(prev => ({ ...prev, [name]: '' }));
+        }
+    };
+
     return (
-        <div style={overlayStyle} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-            <div style={modalContentStyle}>
-                <div className="d-flex justify-content-between align-items-center mb-3">
-                    <h2 className="h4 mb-0">{budgetToEdit ? 'Edit Budget' : 'Add New Budget'}</h2>
-                    <button type="button" className="btn-close" onClick={onClose} aria-label="Close"></button>
+        <div className="modal fade show" style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+            <div className="modal-dialog modal-dialog-centered">
+                <div className="modal-content">
+                    <div className="modal-header">
+                        <h5 className="modal-title">
+                            {budgetToEdit ? 'Edit Budget' : 'Add New Budget'}
+                        </h5>
+                        <button type="button" className="btn-close" onClick={onClose}></button>
+                    </div>
+                    <form onSubmit={handleSubmit}>
+                        <div className="modal-body">
+                            {errors.submit && (
+                                <div className="alert alert-danger">
+                                    <i className="bi bi-exclamation-triangle-fill me-2"></i>
+                                    {errors.submit}
+                                </div>
+                            )}
+
+                            <div className="mb-3">
+                                <label htmlFor="budgetName" className="form-label required">Budget Name</label>
+                                <input
+                                    type="text"
+                                    className={`form-control ${errors.budgetName ? 'is-invalid' : ''}`}
+                                    id="budgetName"
+                                    name="budgetName"
+                                    value={formData.budgetName}
+                                    onChange={handleChange}
+                                    placeholder="Enter budget name"
+                                />
+                                {errors.budgetName && (
+                                    <div className="invalid-feedback">
+                                        <i className="bi bi-exclamation-circle-fill me-1"></i>
+                                        {errors.budgetName}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="mb-3">
+                                <label htmlFor="budgetAmount" className="form-label required">Budget Amount</label>
+                                <div className="input-group">
+                                    <span className="input-group-text">₫</span>
+                                    <input
+                                        type="number"
+                                        className={`form-control ${errors.budgetAmount ? 'is-invalid' : ''}`}
+                                        id="budgetAmount"
+                                        name="budgetAmount"
+                                        value={formData.budgetAmount}
+                                        onChange={handleChange}
+                                        min="0"
+                                        step="0.01"
+                                        placeholder="Enter amount"
+                                    />
+                                </div>
+                                {errors.budgetAmount && (
+                                    <div className="invalid-feedback">
+                                        <i className="bi bi-exclamation-circle-fill me-1"></i>
+                                        {errors.budgetAmount}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="mb-3">
+                                <label htmlFor="budgetPeriod" className="form-label required">
+                                    Budget Period
+                                    <i className="bi bi-info-circle ms-1" 
+                                       title="Select the frequency of this budget: Weekly, Monthly, Quarterly, or Yearly"></i>
+                                </label>
+                                <select
+                                    className={`form-select ${errors.budgetPeriod ? 'is-invalid' : ''}`}
+                                    id="budgetPeriod"
+                                    name="budgetPeriod"
+                                    value={formData.budgetPeriod}
+                                    onChange={handleChange}
+                                    required
+                                >
+                                    <option value="">Select period</option>
+                                    <option value="Weekly">Weekly</option>
+                                    <option value="Monthly">Monthly</option>
+                                    <option value="Quarterly">Quarterly</option>
+                                    <option value="Yearly">Yearly</option>
+                                </select>
+                                {errors.budgetPeriod && (
+                                    <div className="invalid-feedback d-flex align-items-center">
+                                        <i className="bi bi-exclamation-circle-fill me-1"></i>
+                                        {errors.budgetPeriod}
+                                    </div>
+                                )}
+                                <small className="form-text text-muted">
+                                    Choose how often this budget will be reset: Weekly, Monthly, Quarterly, or Yearly
+                                </small>
+                            </div>
+
+                            <div className="row mb-3">
+                                <div className="col-md-6">
+                                    <label htmlFor="startDate" className="form-label required">Start Date</label>
+                                    <input
+                                        type="date"
+                                        className={`form-control ${errors.startDate ? 'is-invalid' : ''}`}
+                                        id="startDate"
+                                        name="startDate"
+                                        value={formData.startDate}
+                                        onChange={handleChange}
+                                    />
+                                    {errors.startDate && (
+                                        <div className="invalid-feedback">
+                                            <i className="bi bi-exclamation-circle-fill me-1"></i>
+                                            {errors.startDate}
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="col-md-6">
+                                    <label htmlFor="endDate" className="form-label required">End Date</label>
+                                    <input
+                                        type="date"
+                                        className={`form-control ${errors.endDate ? 'is-invalid' : ''}`}
+                                        id="endDate"
+                                        name="endDate"
+                                        value={formData.endDate}
+                                        onChange={handleChange}
+                                    />
+                                    {errors.endDate && (
+                                        <div className="invalid-feedback">
+                                            <i className="bi bi-exclamation-circle-fill me-1"></i>
+                                            {errors.endDate}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="mb-3">
+                                <label htmlFor="alertThreshold" className="form-label">
+                                    Alert Threshold (%)
+                                    <i className="bi bi-info-circle ms-1" 
+                                       title="Percentage of budget spent that triggers an alert"></i>
+                                </label>
+                                <input
+                                    type="number"
+                                    className={`form-control ${errors.alertThreshold ? 'is-invalid' : ''}`}
+                                    id="alertThreshold"
+                                    name="alertThreshold"
+                                    value={formData.alertThreshold}
+                                    onChange={handleChange}
+                                    min="0"
+                                    max="100"
+                                    step="1"
+                                />
+                                {errors.alertThreshold && (
+                                    <div className="invalid-feedback">
+                                        <i className="bi bi-exclamation-circle-fill me-1"></i>
+                                        {errors.alertThreshold}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="mb-3">
+                                <label htmlFor="categoryId" className="form-label required">Category</label>
+                                <select
+                                    className={`form-select ${errors.categoryId ? 'is-invalid' : ''}`}
+                                    id="categoryId"
+                                    name="categoryId"
+                                    value={formData.categoryId}
+                                    onChange={handleChange}
+                                >
+                                    <option value="">Select category</option>
+                                    {categories.map(category => (
+                                        <option key={category.id} value={category.id}>
+                                            {category.name}
+                                        </option>
+                                    ))}
+                                </select>
+                                {errors.categoryId && (
+                                    <div className="invalid-feedback">
+                                        <i className="bi bi-exclamation-circle-fill me-1"></i>
+                                        {errors.categoryId}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button type="button" className="btn btn-secondary" onClick={onClose}>
+                                Cancel
+                            </button>
+                            <button 
+                                type="submit" 
+                                className="btn btn-primary"
+                                disabled={isSubmitting}
+                            >
+                                {isSubmitting ? (
+                                    <>
+                                        <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                        Saving...
+                                    </>
+                                ) : (
+                                    'Save Budget'
+                                )}
+                            </button>
+                        </div>
+                    </form>
                 </div>
-                {formError && <div className="alert alert-danger py-2 mb-3">{formError}</div>}
-                <form onSubmit={handleSubmit}>
-                    {/* Các trường input của form giữ nguyên */}
-                    <div className="mb-3">
-                        <label htmlFor="budget-name" className="form-label fw-bold">Budget Name <span className="text-danger">*</span></label>
-                        <input type="text" className="form-control" id="budget-name" name="budgetName" value={formData.budgetName} onChange={handleChange} required placeholder="E.g., Monthly Food Budget" />
-                    </div>
-                    <div className="mb-3">
-                        <label htmlFor="budget-amount" className="form-label fw-bold">Budget Amount <span className="text-danger">*</span></label>
-                        <input type="number" step="0.01" className="form-control" id="budget-amount" name="budgetAmount" value={formData.budgetAmount} onChange={handleChange} required placeholder="0.00" />
-                    </div>
-                    <div className="row mb-3">
-                        <div className="col-md-6">
-                            <label htmlFor="budget-period" className="form-label fw-bold">Budget Period</label>
-                            <select className="form-select" id="budget-period" name="budgetPeriod" value={formData.budgetPeriod} onChange={handleChange}>
-                                <option value="Daily">Daily</option>
-                                <option value="Weekly">Weekly</option>
-                                <option value="Monthly">Monthly</option>
-                                <option value="Quarterly">Quarterly</option>
-                                <option value="Yearly">Yearly</option>
-                            </select>
-                        </div>
-                        <div className="col-md-6">
-                            <label htmlFor="budget-categoryId" className="form-label fw-bold">Category <span className="text-danger">*</span></label>
-                            <select className="form-select" id="budget-categoryId" name="categoryId" value={formData.categoryId} onChange={handleChange} required disabled={safeCategories.length === 0}>
-                                <option value="" disabled>{safeCategories.length === 0 ? 'No categories available' : '--- Select category ---'}</option>
-                                {safeCategories.map(cat => (<option key={cat.id} value={cat.id} style={{ color: cat.color }}>{cat.name}</option>))}
-                            </select>
-                            {safeCategories.length === 0 && <small className="text-muted d-block mt-1">Please create categories first.</small>}
-                        </div>
-                    </div>
-                    <div className="row mb-3">
-                        <div className="col-md-6">
-                            <label htmlFor="budget-startDate" className="form-label fw-bold">Start Date <span className="text-danger">*</span></label>
-                            <input type="date" className="form-control" id="budget-startDate" name="startDate" value={formData.startDate} onChange={handleChange} required />
-                        </div>
-                        <div className="col-md-6">
-                            <label htmlFor="budget-endDate" className="form-label fw-bold">End Date <span className="text-danger">*</span></label>
-                            <input type="date" className="form-control" id="budget-endDate" name="endDate" value={formData.endDate} onChange={handleChange} required />
-                        </div>
-                    </div>
-                    <div className="mb-3">
-                        <label htmlFor="budget-alertThreshold" className="form-label fw-bold">Alert Threshold (Optional)</label>
-                        <input type="number" step="0.01" className="form-control" id="budget-alertThreshold" name="alertThreshold" value={formData.alertThreshold} onChange={handleChange} placeholder="0.00" />
-                        <small className="text-muted">Notify when spending reaches this amount.</small>
-                    </div>
-                    <div className="d-flex justify-content-end mt-4 pt-3 border-top">
-                        <button type="button" className="btn btn-outline-secondary me-2" onClick={onClose}>Cancel</button>
-                        <button type="submit" className="btn btn-primary">{budgetToEdit ? 'Save Changes' : 'Add Budget'}</button>
-                    </div>
-                </form>
             </div>
         </div>
     );
 };
 
-
-// --- BudgetManagement Component (Main Page Component) ---
 const BudgetManagement = () => {
     const [budgets, setBudgets] = useState([]);
     const [categories, setCategories] = useState([]);
@@ -151,161 +397,271 @@ const BudgetManagement = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [filterPeriod, setFilterPeriod] = useState('');
     const [filterCategory, setFilterCategory] = useState('');
-
-    // --- SỬA LẠI HÀM NORMALIZE NGAY TẠI ĐÂY ĐỂ DỄ DEBUG ---
-    const normalizeBudgetForState = (apiBudget) => {
-        const startDate = apiBudget.startDate ? new Date(apiBudget.startDate).toISOString().slice(0, 10) : '';
-        const endDate = apiBudget.endDate ? new Date(apiBudget.endDate).toISOString().slice(0, 10) : '';
-        const validPeriods = ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Yearly'];
-        
-        return {
-            id: apiBudget.id,
-            budgetName: apiBudget.budgetName || '',
-            budgetAmount: apiBudget.budgetAmount || 0,
-            budgetPeriod: validPeriods.includes(apiBudget.budgetPeriod) ? apiBudget.budgetPeriod : 'Monthly',
-            startDate,
-            endDate,
-            alertThreshold: apiBudget.alertThreshold || 0,
-            // --- ĐÂY LÀ PHẦN SỬA LỖI QUAN TRỌNG NHẤT ---
-            // Kiểm tra tường minh, không dùng `||` để tránh lỗi với số 0
-            categoryId: apiBudget.categoryId !== undefined && apiBudget.categoryId !== null ? apiBudget.categoryId : '',
-        };
-    };
+    const [deleteConfirmation, setDeleteConfirmation] = useState(null);
+    const [isProcessing, setIsProcessing] = useState(false);
 
     const handleApiError = useCallback((error, context = 'operation') => {
-        // ... hàm này giữ nguyên
         let message = `Error during ${context}.`;
         if (error.response) {
-            if (error.response.status === 401) { message = 'Session expired or invalid token. Please log in again.'; localStorage.removeItem('authToken'); localStorage.removeItem('userId'); setTimeout(() => { if (window.location.pathname !== '/login') { window.location.href = '/login'; } }, 2500); }
-            else if (error.response.data) { if (typeof error.response.data === 'string' && error.response.data.length < 200) message = error.response.data; else if (error.response.data.message) message = error.response.data.message; else if (error.response.data.title) message = error.response.data.title; else if (error.response.data.error) message = error.response.data.error; else if (error.response.data.errors) { const errors = error.response.data.errors; const firstErrorField = Object.keys(errors)[0]; if (firstErrorField && errors[firstErrorField] && errors[firstErrorField].length > 0) { message = `${firstErrorField}: ${errors[firstErrorField][0]}`; } else { message = `Validation error in ${firstErrorField}.`; } } else { message = `Server error (${error.response.status}) during ${context}.`; } }
-        } else if (error.request) { message = `Network error during ${context}. Please check your connection.`; }
-        else { message = error.message || `Unknown error during ${context}.`; }
-        setPageError(message); console.error(`API Error (${context}):`, error);
+            if (error.response.status === 401) {
+                message = 'Session expired. Redirecting to login...';
+                localStorage.removeItem('authToken');
+                localStorage.removeItem('userId');
+                setTimeout(() => {
+                    if (window.location.pathname !== '/login') window.location.href = '/login';
+                }, 3000);
+            } else {
+                message = error.response.data?.message || error.response.data?.title || `Server error (${error.response.status}).`;
+            }
+        } else if (error.request) {
+            message = `Network error. Please check your connection.`;
+        } else {
+            message = error.message || `Unknown error.`;
+        }
+        setPageError(message);
+        console.error(`API Error (${context}):`, error);
     }, []);
 
     const fetchData = useCallback(async () => {
-        setIsLoading(true); setPageError('');
+        setIsLoading(true);
+        setPageError('');
         try {
-            const [budgetsResponse, categoriesResponse] = await Promise.all([getBudgets(), getCategories()]);
-            // Áp dụng hàm normalize đã sửa lỗi ở đây
-            setBudgets(budgetsResponse.map(normalizeBudgetForState));
-            setCategories(categoriesResponse); // Giả sử categories không cần normalize phức tạp
+            const [budgetsData, categoriesData] = await Promise.all([
+                getBudgets(),
+                getCategories()
+            ]);
+            
+            setBudgets(budgetsData);
+            setCategories(categoriesData.filter(cat => cat.isActive));
         } catch (error) {
-            handleApiError(error, 'fetching initial data');
+            handleApiError(error, 'fetching data');
         } finally {
             setIsLoading(false);
         }
     }, [handleApiError]);
 
-    useEffect(() => { fetchData(); }, [fetchData]);
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]);
 
     const handleSubmitBudget = async (budgetData) => {
-        setIsLoading(true); setPageError('');
+        setIsProcessing(true);
         try {
-            const payload = {
-                budgetName: budgetData.budgetName,
-                budgetAmount: parseFloat(budgetData.budgetAmount),
-                budgetPeriod: budgetData.budgetPeriod,
-                startDate: new Date(budgetData.startDate).toISOString(),
-                endDate: new Date(budgetData.endDate).toISOString(),
-                alertThreshold: parseFloat(budgetData.alertThreshold) || 0,
-                categoryId: parseInt(budgetData.categoryId, 10),
-            };
-            if (isNaN(payload.categoryId)) { throw new Error('Invalid category ID.'); }
             if (budgetToEdit) {
-                await updateBudget(budgetData.id, payload);
+                console.log('Updating budget:', budgetToEdit.id, budgetData);
+                await updateBudget(budgetToEdit.id, budgetData);
                 alert('Budget updated successfully!');
             } else {
-                await createBudget(payload);
-                alert('Budget added successfully!');
+                console.log('Creating new budget:', budgetData);
+                await createBudget(budgetData);
+                alert('Budget created successfully!');
             }
             await fetchData();
             handleCloseModal();
         } catch (error) {
-            handleApiError(error, 'saving budget');
-            throw error;
+            console.error('Error saving budget:', error);
+            let errorMessage = 'Failed to save budget. ';
+            if (error.message.includes('session has expired')) {
+                errorMessage = 'Your session has expired. Please log in again.';
+                setTimeout(() => {
+                    window.location.href = '/login';
+                }, 3000);
+            } else if (error.message.includes('not found')) {
+                errorMessage = 'The budget you are trying to update no longer exists.';
+            } else if (error.message.includes('Invalid budget data')) {
+                errorMessage = error.message;
+            }
+            alert(errorMessage);
         } finally {
-            setIsLoading(false);
+            setIsProcessing(false);
         }
     };
 
-    const handleDeleteBudget = async (budgetId) => {
-        // ... hàm này giữ nguyên
-        if (window.confirm('Are you sure you want to delete this budget?')) {
-            setIsLoading(true); setPageError('');
-            try { await deleteBudget(budgetId); alert('Budget deleted successfully!'); await fetchData(); }
-            catch (error) { handleApiError(error, 'deleting budget'); }
-            finally { setIsLoading(false); }
+    const handleDeleteBudget = async (budget) => {
+        setDeleteConfirmation({
+            id: budget.id,
+            name: budget.budgetName,
+            amount: formatCurrency(budget.budgetAmount)
+        });
+    };
+
+    const confirmDelete = async () => {
+        if (!deleteConfirmation) return;
+
+        setIsProcessing(true);
+        try {
+            console.log('Deleting budget:', deleteConfirmation.id);
+            await deleteBudget(deleteConfirmation.id);
+            alert('Budget deleted successfully!');
+            await fetchData();
+        } catch (error) {
+            console.error('Error deleting budget:', error);
+            let errorMessage = 'Failed to delete budget. ';
+            if (error.message.includes('session has expired')) {
+                errorMessage = 'Your session has expired. Please log in again.';
+                setTimeout(() => {
+                    window.location.href = '/login';
+                }, 3000);
+            } else if (error.message.includes('not found')) {
+                errorMessage = 'The budget you are trying to delete no longer exists.';
+            } else if (error.message.includes('permission')) {
+                errorMessage = 'You do not have permission to delete this budget.';
+            }
+            alert(errorMessage);
+        } finally {
+            setIsProcessing(false);
+            setDeleteConfirmation(null);
         }
     };
-    
-    // Các hàm helper và logic mở/đóng modal giữ nguyên
-    const handleOpenAddBudgetModal = () => { if (categories.length === 0) { setPageError('Please create at least one category before adding a budget.'); return; } setBudgetToEdit(null); setIsModalOpen(true); };
-    const handleOpenEditBudgetModal = (budget) => { setBudgetToEdit(budget); setIsModalOpen(true); };
-    const handleCloseModal = () => { setIsModalOpen(false); setBudgetToEdit(null); };
 
-    const getCategoryName = (categoryId) => {
-        const category = categories.find(cat => String(cat.id) === String(categoryId));
-        return category ? category.name : 'Unknown';
-    };
-    const getCategoryColor = (categoryId) => {
-        const category = categories.find(cat => String(cat.id) === String(categoryId));
-        return category ? category.color : '#6c757d';
+    const cancelDelete = () => {
+        setDeleteConfirmation(null);
     };
 
-    // --- SỬA LẠI LOGIC FILTER ĐỂ AN TOÀN HƠN ---
-    const filteredBudgets = budgets.filter(budget => {
-        // Điều kiện 1: Lọc theo chu kỳ
-        const periodMatch = !filterPeriod || budget.budgetPeriod === filterPeriod;
-        // Điều kiện 2: Lọc theo danh mục. So sánh chuỗi với chuỗi để tránh lỗi kiểu dữ liệu
-        const categoryMatch = !filterCategory || String(budget.categoryId) === String(filterCategory);
-        return periodMatch && categoryMatch;
-    });
-    
-    // Để debug, bạn có thể thêm log này để xem dữ liệu trước và sau khi lọc
-    // console.log("All budgets in state:", budgets);
-    // console.log("Filters:", { filterPeriod, filterCategory });
-    // console.log("Filtered budgets to display:", filteredBudgets);
+    const handleOpenAddBudgetModal = () => {
+        if (categories.length > 0) {
+            setBudgetToEdit(null);
+            setIsModalOpen(true);
+        } else {
+            alert("Please create categories first.");
+        }
+    };
+
+    const handleOpenEditBudgetModal = (budget) => {
+        setBudgetToEdit(budget);
+        setIsModalOpen(true);
+    };
+
+    const handleCloseModal = () => {
+        setIsModalOpen(false);
+        setBudgetToEdit(null);
+    };
+
+    const calculateProgress = (budget) => {
+        const percentage = (budget.spentAmount / budget.budgetAmount) * 100;
+        const thresholdReached = percentage >= budget.alertThreshold;
+        return {
+            percentage: Math.min(percentage, 100),
+            thresholdReached,
+            remaining: budget.budgetAmount - budget.spentAmount
+        };
+    };
+
+    const filteredBudgets = budgets.filter(budget => 
+        (!filterPeriod || budget.budgetPeriod === filterPeriod) &&
+        (!filterCategory || String(budget.categoryId) === String(filterCategory))
+    );
 
     return (
         <div className="container mt-4">
-            {/* Toàn bộ phần JSX render giữ nguyên như cũ */}
-            <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap">
-                <h1 className="h2 mb-2 mb-md-0">Budget Management</h1>
-                <button className="btn btn-primary" onClick={handleOpenAddBudgetModal} disabled={categories.length === 0}>
+            <div className="d-flex justify-content-between align-items-center mb-4">
+                <h1 className="h2 mb-0">Budget Management</h1>
+                <button 
+                    className="btn btn-primary" 
+                    onClick={handleOpenAddBudgetModal}
+                    disabled={categories.length === 0}
+                >
                     <i className="bi bi-plus-circle-fill me-2"></i>Add Budget
                 </button>
             </div>
 
-            {isLoading && <div className="alert alert-info text-center">Loading data...</div>}
-            {pageError && !isLoading && <div className="alert alert-danger text-center">{pageError}</div>}
-            
-            {!isLoading && !pageError && (budgets.length > 0 || filterPeriod || filterCategory) && (
-                <div className="card mb-4 shadow-sm">
-                    <div className="card-body">
-                        <h5 className="card-title mb-3">Filters</h5>
-                        <div className="row g-3">
-                            <div className="col-md-4">
-                                <label htmlFor="filterPeriod" className="form-label form-label-sm">Budget Period</label>
-                                <select id="filterPeriod" className="form-select form-select-sm" value={filterPeriod} onChange={e => setFilterPeriod(e.target.value)}>
-                                    <option value="">All Periods</option>
-                                    <option value="Daily">Daily</option>
-                                    <option value="Weekly">Weekly</option>
-                                    <option value="Monthly">Monthly</option>
-                                    <option value="Quarterly">Quarterly</option>
-                                    <option value="Yearly">Yearly</option>
-                                </select>
+            <div className="card mb-4 shadow-sm">
+                <div className="card-body">
+                    <h5 className="card-title mb-3">Filters</h5>
+                    <div className="row g-3">
+                        <div className="col-md-6">
+                            <label htmlFor="filterPeriod" className="form-label">Period</label>
+                            <select 
+                                id="filterPeriod" 
+                                className="form-select" 
+                                value={filterPeriod} 
+                                onChange={e => setFilterPeriod(e.target.value)}
+                            >
+                                <option value="">All</option>
+                                <option value="Daily">Daily</option>
+                                <option value="Weekly">Weekly</option>
+                                <option value="Monthly">Monthly</option>
+                                <option value="Quarterly">Quarterly</option>
+                                <option value="Yearly">Yearly</option>
+                            </select>
+                        </div>
+                        <div className="col-md-6">
+                            <label htmlFor="filterCategory" className="form-label">Category</label>
+                            <select 
+                                id="filterCategory" 
+                                className="form-select" 
+                                value={filterCategory} 
+                                onChange={e => setFilterCategory(e.target.value)}
+                                disabled={categories.length === 0}
+                            >
+                                <option value="">All</option>
+                                {categories.map(cat => (
+                                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {isLoading && (
+                <div className="text-center my-5">
+                    <div className="spinner-border text-primary" style={{ width: '3rem', height: '3rem' }}></div>
+                </div>
+            )}
+
+            {pageError && !isLoading && (
+                <div className="alert alert-danger">{pageError}</div>
+            )}
+
+            {deleteConfirmation && (
+                <div className="modal fade show" style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+                    <div className="modal-dialog modal-dialog-centered">
+                        <div className="modal-content">
+                            <div className="modal-header">
+                                <h5 className="modal-title text-danger">
+                                    <i className="bi bi-exclamation-triangle-fill me-2"></i>
+                                    Confirm Delete
+                                </h5>
+                                <button type="button" className="btn-close" onClick={cancelDelete}></button>
                             </div>
-                            <div className="col-md-4">
-                                <label htmlFor="filterCategory" className="form-label form-label-sm">Category</label>
-                                <select id="filterCategory" className="form-select form-select-sm" value={filterCategory} onChange={e => setFilterCategory(e.target.value)} disabled={categories.length === 0}>
-                                    <option value="">All Categories</option>
-                                    {categories.map(cat => (<option key={cat.id} value={cat.id}>{cat.name}</option>))}
-                                </select>
+                            <div className="modal-body">
+                                <p>Are you sure you want to delete this budget?</p>
+                                <div className="alert alert-warning">
+                                    <strong>Budget Name:</strong> {deleteConfirmation.name}<br />
+                                    <strong>Amount:</strong> {deleteConfirmation.amount}
+                                </div>
+                                <p className="text-danger">
+                                    <i className="bi bi-exclamation-circle-fill me-1"></i>
+                                    This action cannot be undone.
+                                </p>
                             </div>
-                            <div className="col-md-4 d-flex align-items-end">
-                                <button className="btn btn-outline-secondary btn-sm" onClick={() => { setFilterPeriod(''); setFilterCategory(''); }}>
-                                    <i className="bi bi-x-lg me-1"></i>Clear Filters
+                            <div className="modal-footer">
+                                <button 
+                                    type="button" 
+                                    className="btn btn-secondary" 
+                                    onClick={cancelDelete}
+                                    disabled={isProcessing}
+                                >
+                                    Cancel
+                                </button>
+                                <button 
+                                    type="button" 
+                                    className="btn btn-danger" 
+                                    onClick={confirmDelete}
+                                    disabled={isProcessing}
+                                >
+                                    {isProcessing ? (
+                                        <>
+                                            <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                            Deleting...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <i className="bi bi-trash-fill me-2"></i>
+                                            Delete Budget
+                                        </>
+                                    )}
                                 </button>
                             </div>
                         </div>
@@ -314,60 +670,111 @@ const BudgetManagement = () => {
             )}
 
             {!isLoading && !pageError && (
-                filteredBudgets.length > 0 ? (
+                <div className="card shadow-sm">
                     <div className="table-responsive">
-                        <table className="table table-hover table-sm align-middle">
+                        <table className="table table-hover align-middle mb-0">
                             <thead className="table-light">
                                 <tr>
-                                    <th scope="col">Budget Name</th>
-                                    <th scope="col">Category</th>
-                                    <th scope="col">Amount</th>
-                                    <th scope="col">Period</th>
-                                    <th scope="col">Start Date</th>
-                                    <th scope="col">End Date</th>
-                                    <th scope="col">Alert Threshold</th>
-                                    <th scope="col" className="text-center">Actions</th>
+                                    <th>Budget Name</th>
+                                    <th>Category</th>
+                                    <th className="text-end">Amount</th>
+                                    <th>Period</th>
+                                    <th>Start Date</th>
+                                    <th>End Date</th>
+                                    <th className="text-center">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {filteredBudgets.map(budget => (
-                                    <tr key={budget.id}>
-                                        <td>{budget.budgetName}</td>
-                                        <td>
-                                            <span className="badge" style={{ backgroundColor: getCategoryColor(budget.categoryId), color: '#fff', fontSize: '0.8em' }}>
-                                                {getCategoryName(budget.categoryId)}
-                                            </span>
-                                        </td>
-                                        <td>{formatCurrency(budget.budgetAmount)}</td>
-                                        <td>{budget.budgetPeriod}</td>
-                                        <td>{new Date(budget.startDate).toLocaleDateString('en-GB')}</td>
-                                        <td>{new Date(budget.endDate).toLocaleDateString('en-GB')}</td>
-                                        <td>{formatCurrency(budget.alertThreshold)}</td>
-                                        <td className="text-center">
-                                            <button className="btn btn-sm btn-outline-secondary me-1 py-0 px-1" onClick={() => handleOpenEditBudgetModal(budget)} title="Edit">
-                                                <i className="bi bi-pencil-fill"></i>
-                                            </button>
-                                            <button className="btn btn-sm btn-outline-danger py-0 px-1" onClick={() => handleDeleteBudget(budget.id)} title="Delete">
-                                                <i className="bi bi-trash3-fill"></i>
-                                            </button>
+                                {filteredBudgets.length > 0 ? (
+                                    filteredBudgets.map(budget => {
+                                        const progress = calculateProgress(budget);
+                                        const category = categories.find(cat => cat.id === budget.categoryId);
+                                        
+                                        return (
+                                            <tr key={budget.id}>
+                                                <td>
+                                                    <div className="fw-bold">{budget.budgetName}</div>
+                                                    <div className="progress mt-1" style={{ height: '5px' }}>
+                                                        <div 
+                                                            className={`progress-bar ${progress.thresholdReached ? 'bg-danger' : 'bg-success'}`}
+                                                            role="progressbar"
+                                                            style={{ width: `${progress.percentage}%` }}
+                                                            aria-valuenow={progress.percentage}
+                                                            aria-valuemin="0"
+                                                            aria-valuemax="100"
+                                                        />
+                                                    </div>
+                                                    <small className="text-muted">
+                                                        {formatCurrency(budget.spentAmount)} / {formatCurrency(budget.budgetAmount)}
+                                                        {progress.thresholdReached && (
+                                                            <span className="text-danger ms-2">
+                                                                <i className="bi bi-exclamation-triangle-fill"></i> Threshold reached
+                                                            </span>
+                                                        )}
+                                                    </small>
+                                                </td>
+                                                <td>
+                                                    <span 
+                                                        className="badge" 
+                                                        style={{ 
+                                                            backgroundColor: category?.color || '#6c757d',
+                                                            color: 'white'
+                                                        }}
+                                                    >
+                                                        {category?.name || 'N/A'}
+                                                    </span>
+                                                </td>
+                                                <td className="text-end">
+                                                    <div className="fw-bold">{formatCurrency(budget.budgetAmount)}</div>
+                                                    <small className="text-muted">
+                                                        Remaining: {formatCurrency(progress.remaining)}
+                                                    </small>
+                                                </td>
+                                                <td>{budget.budgetPeriod}</td>
+                                                <td>{formatDate(budget.startDate)}</td>
+                                                <td>{formatDate(budget.endDate)}</td>
+                                                <td className="text-center">
+                                                    <button 
+                                                        className="btn btn-sm btn-outline-secondary me-1" 
+                                                        onClick={() => handleOpenEditBudgetModal(budget)}
+                                                        title="Edit Budget"
+                                                        disabled={isProcessing}
+                                                    >
+                                                        <i className="bi bi-pencil-fill"></i>
+                                                    </button>
+                                                    <button 
+                                                        className="btn btn-sm btn-outline-danger" 
+                                                        onClick={() => handleDeleteBudget(budget)}
+                                                        title="Delete Budget"
+                                                        disabled={isProcessing}
+                                                    >
+                                                        <i className="bi bi-trash3-fill"></i>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
+                                ) : (
+                                    <tr>
+                                        <td colSpan="7" className="text-center p-4 text-muted">
+                                            No budgets found.
                                         </td>
                                     </tr>
-                                ))}
+                                )}
                             </tbody>
                         </table>
                     </div>
-                ) : (budgets.length === 0 && !filterPeriod && !filterCategory) ? (
-                    <div className="text-center p-5 border rounded bg-light">
-                        <i className="bi bi-wallet2" style={{ fontSize: '3rem', color: '#6c757d' }}></i>
-                        <p className="mt-3 mb-2 text-muted">No budgets have been set yet.</p>
-                        {categories.length === 0 && <p className="text-warning small">Please create categories first to add budgets.</p>}
-                    </div>
-                ) : (
-                    <div className="alert alert-warning text-center">No budgets match the selected filters.</div>
-                )
+                </div>
             )}
 
-            {isModalOpen && <BudgetFormModal onClose={handleCloseModal} onSubmit={handleSubmitBudget} budgetToEdit={budgetToEdit} categories={categories} />}
+            {isModalOpen && (
+                <BudgetFormModal 
+                    onClose={handleCloseModal} 
+                    onSubmit={handleSubmitBudget} 
+                    budgetToEdit={budgetToEdit} 
+                    categories={categories} 
+                />
+            )}
         </div>
     );
 };

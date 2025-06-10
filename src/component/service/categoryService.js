@@ -4,106 +4,136 @@ const API_BASE_URL = 'https://localhost:7166/api/Categories';
 
 const getAuthToken = () => {
   const token = localStorage.getItem('authToken');
-  if (!token || token === 'YOUR_TOKEN_HERE') {
+  if (!token) {
     throw new Error('No valid authentication token found. Please log in.');
   }
   return token;
 };
 
 const normalizeCategoryFromApi = (apiCategory) => {
-  return {
-    id: apiCategory.id,
+  console.log('Normalizing category from API:', apiCategory);
+  const normalized = {
+    id: apiCategory.categoryId,
     name: apiCategory.name,
-    type: apiCategory.categoryType?.toLowerCase(),
+    type: apiCategory.categoryType?.toUpperCase(),
     description: apiCategory.description,
     color: apiCategory.color,
     icon: apiCategory.icon,
     isDefault: apiCategory.isDefault,
+    isActive: apiCategory.isActive,
+    createdAt: apiCategory.createdAt,
+    updatedAt: apiCategory.updatedAt
   };
+  console.log('Normalized category:', normalized);
+  return normalized;
 };
 
 const normalizeCategoryForApi = (appCategory) => {
-  return {
+  console.log('Normalizing category for API:', appCategory);
+  const normalized = {
     name: appCategory.name,
-    categoryType: appCategory.type?.charAt(0).toUpperCase() + appCategory.type?.slice(1),
+    categoryType: appCategory.type?.toUpperCase(),
     description: appCategory.description,
     color: appCategory.color,
     icon: appCategory.icon,
     isDefault: appCategory.isDefault || false,
+    isActive: true
   };
+  console.log('Normalized category for API:', normalized);
+  return normalized;
 };
 
-const createAxiosInstance = () => {
-  const token = getAuthToken();
-  const instance = axios.create({
-    baseURL: API_BASE_URL,
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    },
-  });
+const apiClient = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+  }
+});
 
-  instance.interceptors.response.use(
-    response => response,
-    error => {
-      if (error.response?.status === 401) {
-        localStorage.removeItem('authToken');
-      }
-      return Promise.reject(error);
+apiClient.interceptors.request.use(
+  config => {
+    const token = getAuthToken();
+    if (token) {
+      config.headers['Authorization'] = `Bearer ${token}`;
     }
-  );
-
-  return instance;
-};
+    return config;
+  },
+  error => {
+    return Promise.reject(error);
+  }
+);
 
 export const getCategories = async () => {
   try {
-    const axiosInstance = createAxiosInstance();
-    console.log('Fetching categories with headers:', axiosInstance.defaults.headers);
-    const response = await axiosInstance.get('');
-    const categoriesArray = response.data.categories || response.data;
-    if (Array.isArray(categoriesArray)) {
-      return categoriesArray.map(normalizeCategoryFromApi);
-    }
-    return [];
+    console.log('Fetching categories...');
+    const response = await apiClient.get('/');
+    console.log('Raw API response:', response.data);
+    
+    const categoriesData = Array.isArray(response.data) ? response.data : response.data.categories || [];
+    console.log('Categories data before filtering:', categoriesData);
+    
+    const activeCategories = categoriesData.filter(cat => cat.isActive);
+    console.log('Active categories:', activeCategories);
+    
+    const normalizedCategories = activeCategories.map(normalizeCategoryFromApi);
+    console.log('Final normalized categories:', normalizedCategories);
+    
+    return normalizedCategories;
   } catch (error) {
-    console.error('Get categories error:', error.response?.data, error.message);
-    throw new Error(error.response?.data?.message || 'Failed to fetch categories');
+    console.error("API Error - getCategories:", error.response?.data || error.message);
+    throw error;
   }
 };
 
 export const createCategory = async (categoryData) => {
   try {
-    const axiosInstance = createAxiosInstance();
-    const apiPayload = normalizeCategoryForApi(categoryData);
-    const response = await axiosInstance.post('', apiPayload);
+    console.log('Creating category with data:', categoryData);
+    const apiPayload = {
+      name: categoryData.name,
+      categoryType: categoryData.type?.toUpperCase(),
+      description: categoryData.description || '',
+      color: categoryData.color,
+      icon: categoryData.icon,
+      isDefault: categoryData.isDefault || false,
+      isActive: true
+    };
+    console.log('Category API payload:', apiPayload);
+    
+    const response = await apiClient.post('/', apiPayload);
+    console.log('Create category response:', response.data);
+    
     return normalizeCategoryFromApi(response.data);
   } catch (error) {
-    console.error('Create category error:', error.response?.data, error.message);
-    throw new Error(error.response?.data?.message || 'Failed to create category');
+    console.error("API Error - createCategory:", error.response?.data || error.message);
+    throw error;
   }
 };
 
 export const updateCategory = async (id, categoryData) => {
   try {
-    const axiosInstance = createAxiosInstance();
-    const apiPayload = normalizeCategoryForApi({ ...categoryData, id });
-    const response = await axiosInstance.put(`/${id}`, apiPayload);
-    return response.data ? normalizeCategoryFromApi(response.data) : null;
+    const apiPayload = {
+      name: categoryData.name,
+      categoryType: categoryData.type,
+      description: categoryData.description || '',
+      color: categoryData.color,
+      icon: categoryData.icon,
+      isDefault: categoryData.isDefault || false,
+      isActive: categoryData.isActive
+    };
+    const response = await apiClient.put(`/${id}`, apiPayload);
+    return normalizeCategoryFromApi(response.data);
   } catch (error) {
-    console.error('Update category error:', error.response?.data, error.message);
-    throw new Error(error.response?.data?.message || 'Failed to update category');
+    console.error(`API Error - updateCategory(${id}):`, error.response?.data || error.message);
+    throw error;
   }
 };
 
 export const deleteCategory = async (id) => {
   try {
-    const axiosInstance = createAxiosInstance();
-    await axiosInstance.delete(`/${id}`);
-    return null;
+    await apiClient.delete(`/${id}`);
   } catch (error) {
-    console.error('Delete category error:', error.response?.data, error.message);
-    throw new Error(error.response?.data?.message || 'Failed to delete category');
+    console.error(`API Error - deleteCategory(${id}):`, error.response?.data || error.message);
+    throw error;
   }
 };

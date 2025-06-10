@@ -30,18 +30,24 @@ const createAxiosInstance = () => {
 
 // --- Normalization Function ---
 const normalizeGoalFromApi = (apiGoal) => {
-    const targetDate = apiGoal.targetDate && !isNaN(new Date(apiGoal.targetDate).getTime())
-        ? new Date(apiGoal.targetDate).toISOString().slice(0, 10)
-        : new Date().toISOString().slice(0, 10);
-    return {
-        id: apiGoal.id || uuidv4(),
+    console.log('Normalizing goal from API:', apiGoal);
+    const normalized = {
+        id: apiGoal.goalId,
         goalName: apiGoal.goalName || '',
         description: apiGoal.description || '',
         goalType: apiGoal.goalType || 'Savings',
         targetAmount: Math.abs(apiGoal.targetAmount) || 0,
-        targetDate,
+        currentAmount: Math.abs(apiGoal.currentAmount) || 0,
+        targetDate: apiGoal.targetDate ? new Date(apiGoal.targetDate).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
         priority: ['Low', 'Medium', 'High'].includes(apiGoal.priority) ? apiGoal.priority : 'Low',
+        isCompleted: apiGoal.isCompleted || false,
+        completedAt: apiGoal.completedAt,
+        isActive: apiGoal.isActive ?? true,
+        createdAt: apiGoal.createdAt,
+        updatedAt: apiGoal.updatedAt
     };
+    console.log('Normalized goal:', normalized);
+    return normalized;
 };
 
 // --- Helper Function ---
@@ -67,27 +73,70 @@ const apiGetGoals = async (axiosInstance) => {
 
 const apiCreateGoal = async (axiosInstance, payload) => {
     try {
-        const response = await axiosInstance.post('/', payload);
+        console.log('Original create payload:', payload);
+        // Format the payload exactly as the API expects
+        const apiPayload = {
+            goalName: payload.goalName.trim(),
+            description: payload.description?.trim() || '',
+            goalType: payload.goalType,
+            targetAmount: parseFloat(payload.targetAmount),
+            targetDate: new Date(payload.targetDate).toISOString(),
+            priority: payload.priority,
+            isActive: true,
+            isCompleted: false,
+            currentAmount: 0
+        };
+        console.log('Formatted API payload:', apiPayload);
+        
+        const response = await axiosInstance.post('/', apiPayload);
+        console.log('Create response:', response.data);
         return normalizeGoalFromApi(response.data);
     } catch (error) {
-        console.error("API Error - createGoal:", error.response?.data || error.message);
+        console.error("API Error - createGoal:", {
+            status: error.response?.status,
+            data: error.response?.data,
+            message: error.message
+        });
         throw error;
     }
 };
 
 const apiUpdateGoal = async (axiosInstance, id, payload) => {
     try {
-        const response = await axiosInstance.put(`/${id}`, payload);
-        return response.data ? normalizeGoalFromApi(response.data) : null;
+        console.log('Original update payload:', payload);
+        // Format the payload exactly as the API expects
+        const apiPayload = {
+            goalId: parseInt(id), // Ensure ID is a number
+            goalName: payload.goalName.trim(),
+            description: payload.description?.trim() || '',
+            goalType: payload.goalType,
+            targetAmount: parseFloat(payload.targetAmount),
+            targetDate: new Date(payload.targetDate).toISOString(),
+            priority: payload.priority,
+            isActive: true,
+            isCompleted: false, // Default value
+            currentAmount: 0 // Default value
+        };
+        console.log('Formatted API payload:', apiPayload);
+        
+        const response = await axiosInstance.put(`/${id}`, apiPayload);
+        console.log('Update response:', response.data);
+        return normalizeGoalFromApi(response.data);
     } catch (error) {
-        console.error("API Error - updateGoal:", error.response?.data || error.message);
+        console.error("API Error - updateGoal:", {
+            status: error.response?.status,
+            data: error.response?.data,
+            message: error.message
+        });
         throw error;
     }
 };
 
 const apiDeleteGoal = async (axiosInstance, id) => {
     try {
+        console.log('Deleting goal with ID:', id);
         await axiosInstance.delete(`/${id}`);
+        console.log('Goal deleted successfully');
     } catch (error) {
         console.error("API Error - deleteGoal:", error.response?.data || error.message);
         throw error;
@@ -104,18 +153,20 @@ const GoalFormModal = ({ onClose, onSubmit, goalToEdit }) => {
         targetDate: new Date().toISOString().slice(0, 10),
         priority: 'Low',
     };
+
     const [formData, setFormData] = useState(initialFormState);
     const [formError, setFormError] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
         if (goalToEdit) {
             setFormData({
                 goalName: goalToEdit.goalName || '',
                 description: goalToEdit.description || '',
-                goalType: ['Savings', 'Debt Repayment', 'Investment'].includes(goalToEdit.goalType) ? goalToEdit.goalType : 'Savings',
-                targetAmount: goalToEdit.targetAmount !== undefined ? String(Math.abs(goalToEdit.targetAmount)) : '',
-                targetDate: goalToEdit.targetDate || initialFormState.targetDate,
-                priority: ['Low', 'Medium', 'High'].includes(goalToEdit.priority) ? goalToEdit.priority : 'Low',
+                goalType: goalToEdit.goalType || 'Savings',
+                targetAmount: goalToEdit.targetAmount?.toString() || '',
+                targetDate: goalToEdit.targetDate ? new Date(goalToEdit.targetDate).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+                priority: goalToEdit.priority || 'Low',
             });
         } else {
             setFormData(initialFormState);
@@ -131,29 +182,34 @@ const GoalFormModal = ({ onClose, onSubmit, goalToEdit }) => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setFormError('');
-        if (!formData.goalName.trim()) {
-            setFormError('Goal name cannot be empty.');
-            return;
-        }
-        const amountValue = parseFloat(formData.targetAmount);
-        if (isNaN(amountValue) || amountValue <= 0) {
-            setFormError('Target amount must be a positive number.');
-            return;
-        }
-        if (!formData.targetDate) {
-            setFormError('Please select a target date.');
-            return;
-        }
-        const goalData = {
-            ...formData,
-            id: goalToEdit ? goalToEdit.id : uuidv4(),
-            targetAmount: amountValue,
-        };
+        setIsSubmitting(true);
+
         try {
+            // Validate form data
+            if (!formData.goalName.trim()) {
+                throw new Error('Goal name is required');
+            }
+            const amount = parseFloat(formData.targetAmount);
+            if (isNaN(amount) || amount <= 0) {
+                throw new Error('Target amount must be a positive number');
+            }
+            if (!formData.targetDate) {
+                throw new Error('Target date is required');
+            }
+
+            const goalData = {
+                ...formData,
+                id: goalToEdit?.id,
+                targetAmount: amount.toString(), // Keep as string for form handling
+            };
+
             await onSubmit(goalData);
-            onClose(); // Close modal on successful submission
+            onClose();
         } catch (err) {
-            setFormError(err.message || 'Error submitting form.');
+            console.error('Form submission error:', err);
+            setFormError(err.message || 'Error submitting form');
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -273,7 +329,7 @@ const GoalFormModal = ({ onClose, onSubmit, goalToEdit }) => {
                     </div>
                     <div className="d-flex justify-content-end mt-4 pt-3 border-top">
                         <button type="button" className="btn btn-outline-secondary me-2" onClick={onClose}>Cancel</button>
-                        <button type="submit" className="btn btn-primary">{goalToEdit ? 'Save Changes' : 'Add Goal'}</button>
+                        <button type="submit" className="btn btn-primary" disabled={isSubmitting}>{goalToEdit ? 'Save Changes' : 'Add Goal'}</button>
                     </div>
                 </form>
             </div>
@@ -369,33 +425,48 @@ const GoalsManagement = () => {
         setIsLoading(true);
         setPageError('');
         try {
-            const payload = {
-                goalName: goalData.goalName,
-                description: goalData.description,
-                goalType: goalData.goalType,
-                targetAmount: parseFloat(goalData.targetAmount),
-                targetDate: new Date(goalData.targetDate).toISOString(),
-                priority: goalData.priority,
-            };
+            // Validate required fields
+            if (!goalData.goalName?.trim()) {
+                throw new Error('Goal name is required');
+            }
+            if (!goalData.targetAmount || isNaN(parseFloat(goalData.targetAmount)) || parseFloat(goalData.targetAmount) <= 0) {
+                throw new Error('Target amount must be a positive number');
+            }
+            if (!goalData.targetDate) {
+                throw new Error('Target date is required');
+            }
+
+            console.log('Submitting goal data:', goalData);
+            
             if (goalToEdit) {
-                await apiUpdateGoal(axiosInstance, goalData.id, payload);
+                console.log('Updating existing goal:', goalData);
+                await apiUpdateGoal(axiosInstance, goalData.id, goalData);
                 alert('Goal updated successfully!');
             } else {
-                await apiCreateGoal(axiosInstance, payload);
+                console.log('Creating new goal:', goalData);
+                await apiCreateGoal(axiosInstance, goalData);
                 alert('Goal added successfully!');
             }
             await fetchGoals();
             handleCloseModal();
         } catch (error) {
+            console.error('Error submitting goal:', error);
+            const errorMessage = error.response?.data?.message || error.message || 'Failed to save goal';
             handleApiError(error, 'saving goal');
-            throw error;
+            throw new Error(errorMessage);
         } finally {
             setIsLoading(false);
         }
     };
 
     const handleDeleteGoal = async (goalId) => {
-        if (window.confirm('Are you sure you want to delete this goal?')) {
+        const goalToDelete = goals.find(g => g.id === goalId);
+        if (!goalToDelete) {
+            alert('Goal not found!');
+            return;
+        }
+
+        if (window.confirm(`Are you sure you want to delete the goal "${goalToDelete.goalName}"?`)) {
             setIsLoading(true);
             setPageError('');
             try {
@@ -415,6 +486,61 @@ const GoalsManagement = () => {
         if (filterPriority && goal.priority !== filterPriority) return false;
         return true;
     });
+
+    const renderGoalRow = (goal) => (
+        <tr key={goal.id}>
+            <td>
+                <div className="d-flex align-items-center">
+                    {goal.goalName}
+                    {goal.isCompleted && (
+                        <span className="badge bg-success ms-2">
+                            <i className="bi bi-check-circle-fill me-1"></i>Completed
+                        </span>
+                    )}
+                </div>
+            </td>
+            <td>{goal.description || '-'}</td>
+            <td>{goal.goalType}</td>
+            <td>
+                <div className="d-flex flex-column">
+                    <span>{formatCurrency(goal.targetAmount)}</span>
+                    {goal.currentAmount > 0 && (
+                        <small className="text-muted">
+                            Current: {formatCurrency(goal.currentAmount)}
+                        </small>
+                    )}
+                </div>
+            </td>
+            <td>{new Date(goal.targetDate).toLocaleDateString('en-GB')}</td>
+            <td>
+                <span className={`badge ${
+                    goal.priority === 'High' ? 'bg-danger' : 
+                    goal.priority === 'Medium' ? 'bg-warning' : 
+                    'bg-success'
+                }`}>
+                    {goal.priority}
+                </span>
+            </td>
+            <td className="text-center">
+                <button
+                    className="btn btn-sm btn-outline-secondary me-1"
+                    onClick={() => handleOpenEditGoalModal(goal)}
+                    title="Edit Goal"
+                    disabled={goal.isCompleted}
+                >
+                    <i className="bi bi-pencil-fill"></i>
+                </button>
+                <button
+                    className="btn btn-sm btn-outline-danger"
+                    onClick={() => handleDeleteGoal(goal.id)}
+                    title="Delete Goal"
+                    disabled={goal.isCompleted}
+                >
+                    <i className="bi bi-trash3-fill"></i>
+                </button>
+            </td>
+        </tr>
+    );
 
     return (
         <div className="container mt-4">
@@ -486,50 +612,21 @@ const GoalsManagement = () => {
                 ) : filteredGoals.length === 0 && goals.length > 0 ? (
                     <div className="alert alert-warning text-center">No goals match the selected filters.</div>
                 ) : filteredGoals.length > 0 ? (
-                    <div className="table-responsive">
-                        <table className="table table-hover table-sm align-middle">
+                    <div className="table-responsive card shadow-sm">
+                        <table className="table table-hover align-middle mb-0">
                             <thead className="table-light">
                                 <tr>
-                                    <th scope="col">Goal Name</th>
-                                    <th scope="col">Description</th>
-                                    <th scope="col">Type</th>
-                                    <th scope="col">Target Amount</th>
-                                    <th scope="col">Target Date</th>
-                                    <th scope="col">Priority</th>
-                                    <th scope="col" className="text-center">Actions</th>
+                                    <th>Goal Name</th>
+                                    <th>Description</th>
+                                    <th>Type</th>
+                                    <th>Amount</th>
+                                    <th>Target Date</th>
+                                    <th>Priority</th>
+                                    <th className="text-center">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {filteredGoals.map(goal => (
-                                    <tr key={goal.id}>
-                                        <td>{goal.goalName}</td>
-                                        <td>{goal.description || '-'}</td>
-                                        <td>{goal.goalType}</td>
-                                        <td>{formatCurrency(goal.targetAmount)}</td>
-                                        <td>{new Date(goal.targetDate).toLocaleDateString('en-GB')}</td>
-                                        <td>
-                                            <span className={`badge ${goal.priority === 'High' ? 'bg-danger' : goal.priority === 'Medium' ? 'bg-warning' : 'bg-success'}`}>
-                                                {goal.priority}
-                                            </span>
-                                        </td>
-                                        <td className="text-center">
-                                            <button
-                                                className="btn btn-sm btn-outline-secondary me-1 py-0 px-1"
-                                                onClick={() => handleOpenEditGoalModal(goal)}
-                                                title="Edit"
-                                            >
-                                                <i className="bi bi-pencil-fill"></i>
-                                            </button>
-                                            <button
-                                                className="btn btn-sm btn-outline-danger py-0 px-1"
-                                                onClick={() => handleDeleteGoal(goal.id)}
-                                                title="Delete"
-                                            >
-                                                <i className="bi bi-trash3-fill"></i>
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
+                                {filteredGoals.map(renderGoalRow)}
                             </tbody>
                         </table>
                     </div>

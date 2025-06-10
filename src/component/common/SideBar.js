@@ -120,11 +120,11 @@ const SidebarScreen = ({ className }) => {
 
                 {/* Account and Upgrade/Logout section at the bottom */}
                 <ul className="nav flex-column sidebar-bottom-section mt-auto">
-                    <li className="nav-item featured-box mb-3 mx-2 text-center">
+                    {/* <li className="nav-item featured-box mb-3 mx-2 text-center">
                         <img src="/images/credit-card.png" className="img-fluid mb-2" alt="Upgrade" style={{ maxWidth: '70px' }} />
                         <Link className="btn btn-sm btn-danger w-100" to="/upgrade">Upgrade</Link>
-                    </li>
-                    {accountSettingsItems.map((item) => (
+                    </li> */}
+                    {/* {accountSettingsItems.map((item) => (
                         <li className="nav-item" key={item.to}>
                             <NavLink
                                 className="nav-link d-flex align-items-center"
@@ -134,7 +134,7 @@ const SidebarScreen = ({ className }) => {
                                 <span className="nav-link-text">{item.text}</span>
                             </NavLink>
                         </li>
-                    ))}
+                    ))} */}
                     <li className="nav-item logout-section border-top pt-2 mx-2 mt-2">
                         <button
                             className="nav-link text-start w-100 d-flex align-items-center"
