@@ -1,20 +1,22 @@
-// src/component/service/budgetService.js
+// src/service/budgetService.js
 import axios from 'axios';
 
 const API_BASE_URL = 'https://localhost:7166/api/budgets';
 
+// Helper để lấy token, nếu không có sẽ báo lỗi
 const getAuthToken = () => {
     const token = localStorage.getItem('authToken');
     if (!token) {
+        // Ném lỗi này sẽ được bắt bởi interceptor hoặc hàm gọi
         throw new Error('No valid authentication token found. Please log in.');
     }
     return token;
 };
 
-// Helper function to normalize budget data from API
+// Chuẩn hóa dữ liệu nhận từ API sang dạng mà Frontend muốn dùng
 const normalizeBudgetFromApi = (apiBudget) => {
     return {
-        id: apiBudget.budgetId,
+        id: apiBudget.budgetId, // Đổi budgetId -> id
         budgetName: apiBudget.budgetName,
         budgetAmount: apiBudget.budgetAmount,
         budgetPeriod: apiBudget.budgetPeriod,
@@ -27,7 +29,7 @@ const normalizeBudgetFromApi = (apiBudget) => {
     };
 };
 
-// Helper function to normalize budget data for API
+// Chuẩn hóa dữ liệu từ form ở Frontend sang dạng mà API yêu cầu
 const normalizeBudgetForApi = (budgetData) => {
     return {
         budgetName: budgetData.budgetName,
@@ -37,10 +39,11 @@ const normalizeBudgetForApi = (budgetData) => {
         endDate: budgetData.endDate,
         alertThreshold: budgetData.alertThreshold,
         categoryId: budgetData.categoryId,
-        isActive: true
+        isActive: true // Luôn đặt là active khi tạo/cập nhật
     };
 };
 
+// Tạo một instance của axios
 const apiClient = axios.create({
     baseURL: API_BASE_URL,
     headers: {
@@ -49,11 +52,15 @@ const apiClient = axios.create({
     }
 });
 
+// Interceptor để tự động gắn token vào mỗi request
 apiClient.interceptors.request.use(
     config => {
-        const token = getAuthToken();
-        if (token) {
+        try {
+            const token = getAuthToken();
             config.headers['Authorization'] = `Bearer ${token}`;
+        } catch (error) {
+            // Nếu không có token, hủy request
+            return Promise.reject(error);
         }
         return config;
     },
@@ -62,10 +69,12 @@ apiClient.interceptors.request.use(
     }
 );
 
+
 export const getBudgets = async () => {
     try {
         const response = await apiClient.get('/');
         const budgetsData = Array.isArray(response.data) ? response.data : [];
+        // Lọc các budget active và chuẩn hóa dữ liệu
         return budgetsData
             .filter(budget => budget.isActive)
             .map(normalizeBudgetFromApi);
@@ -87,87 +96,36 @@ export const createBudget = async (budgetData) => {
 };
 
 export const updateBudget = async (budgetId, budgetData) => {
-    if (!budgetId) {
-        throw new Error('Budget ID is required for update');
-    }
-
+    if (!budgetId) throw new Error('Budget ID is required for update');
     try {
-        // Log the update attempt
-        console.log(`Attempting to update budget ${budgetId}:`, budgetData);
-
         const apiPayload = normalizeBudgetForApi(budgetData);
-        const response = await apiClient.put(`/${budgetId}`, apiPayload);
-
-        // Log successful update
-        console.log(`Successfully updated budget ${budgetId}:`, response.data);
-
-        return normalizeBudgetFromApi(response.data);
+        // API của bạn có thể trả về NoContent (204) hoặc budget đã cập nhật
+        await apiClient.put(`/${budgetId}`, apiPayload);
+        // Giả định trả về thành công, ta có thể trả về object đã chuẩn hóa
+        return normalizeBudgetFromApi({ budgetId, ...apiPayload, spentAmount: budgetData.spentAmount || 0 });
     } catch (error) {
-        // Enhanced error logging
-        if (error.response) {
-            console.error(`API Error - updateBudget(${budgetId}):`, {
-                status: error.response.status,
-                data: error.response.data,
-                headers: error.response.headers
-            });
-
-            // Handle specific error cases
-            if (error.response.status === 404) {
-                throw new Error(`Budget with ID ${budgetId} not found`);
-            } else if (error.response.status === 400) {
-                throw new Error(`Invalid budget data: ${error.response.data?.message || 'Please check your input'}`);
-            } else if (error.response.status === 401) {
-                throw new Error('Your session has expired. Please log in again.');
-            }
-        }
+        console.error(`API Error - updateBudget(${budgetId}):`, error.response?.data || error.message);
         throw error;
     }
 };
 
 export const deleteBudget = async (budgetId) => {
-    if (!budgetId) {
-        throw new Error('Budget ID is required for deletion');
-    }
-
+    if (!budgetId) throw new Error('Budget ID is required for deletion');
     try {
-        // Log the delete attempt
-        console.log(`Attempting to delete budget ${budgetId}`);
+        await apiClient.delete(`/${budgetId}`);
+    } catch (error) {
+        console.error(`API Error - deleteBudget(${budgetId}):`, error.response?.data || error.message);
+        throw error;
+    }
+};
 
-        // First, verify the budget exists
-        try {
-            await apiClient.get(`/${budgetId}`);
-        } catch (error) {
-            if (error.response?.status === 404) {
-                throw new Error(`Budget with ID ${budgetId} not found`);
-            }
-            throw error;
-        }
-
-        // Proceed with deletion
-        const response = await apiClient.delete(`/${budgetId}`);
-
-        // Log successful deletion
-        console.log(`Successfully deleted budget ${budgetId}`);
-
+// Đừng quên hàm getBudgetAlerts nếu bạn vẫn muốn dùng
+export const getBudgetAlerts = async () => {
+    try {
+        const response = await apiClient.get('/alerts');
         return response.data;
     } catch (error) {
-        // Enhanced error logging
-        if (error.response) {
-            console.error(`API Error - deleteBudget(${budgetId}):`, {
-                status: error.response.status,
-                data: error.response.data,
-                headers: error.response.headers
-            });
-
-            // Handle specific error cases
-            if (error.response.status === 404) {
-                throw new Error(`Budget with ID ${budgetId} not found`);
-            } else if (error.response.status === 401) {
-                throw new Error('Your session has expired. Please log in again.');
-            } else if (error.response.status === 403) {
-                throw new Error('You do not have permission to delete this budget');
-            }
-        }
+        console.error("API Error - getBudgetAlerts:", error.response?.data || error.message);
         throw error;
     }
 };

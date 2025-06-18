@@ -26,7 +26,9 @@ const SidebarScreen = ({ className }) => {
                 { to: "/budgets", text: "Budget" },
                 { to: "/goals", text: "Goals" },
                 { to: "/transactions", text: "Transactions" },
-                { to: "/media-library", text: "Media Library" },
+                { to: "/debts", text: "Debts" },
+                { to: "/investment", text: "Investment" },
+                { to: "/loans", text: "Loan" },
             ]
         },
         

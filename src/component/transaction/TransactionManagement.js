@@ -7,7 +7,7 @@ import { getAccounts } from '../service/accountService';
 import { getCategories } from '../service/categoryService';
 
 // --- Helpers ---
-const formatCurrency = (amount) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
+const formatCurrency = (amount) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 const formatDate = (dateString) => new Date(dateString).toLocaleDateString('en-GB');
 
 // --- Component Form Modal ---
@@ -19,13 +19,27 @@ const TransactionFormModal = ({ show, onClose, onSubmit, transactionToEdit, acco
         transactionType: 'Expense',
         transactionDate: new Date().toISOString().slice(0, 10),
         description: '',
-        merchant: '',
         tags: '',
         isRecurring: false,
         recurringFrequency: 'Monthly'
     };
 
+    // Predefined tags with icons
+    const availableTags = [
+        { value: 'food', icon: '🍔', label: 'Food' },
+        { value: 'transport', icon: '🚗', label: 'Transport' },
+        { value: 'shopping', icon: '🛍️', label: 'Shopping' },
+        { value: 'bills', icon: '📝', label: 'Bills' },
+        { value: 'entertainment', icon: '🎮', label: 'Entertainment' },
+        { value: 'health', icon: '💊', label: 'Health' },
+        { value: 'education', icon: '📚', label: 'Education' },
+        { value: 'salary', icon: '💰', label: 'Salary' },
+        { value: 'investment', icon: '📈', label: 'Investment' },
+        { value: 'other', icon: '📌', label: 'Other' }
+    ];
+
     const [formData, setFormData] = useState(initialFormState);
+    const [selectedTags, setSelectedTags] = useState([]);
     const [error, setError] = useState('');
 
     // Log initial state when modal opens
@@ -41,7 +55,6 @@ const TransactionFormModal = ({ show, onClose, onSubmit, transactionToEdit, acco
                 transactionType: transactionToEdit.transactionType || 'Expense',
                 transactionDate: transactionToEdit.transactionDate ? new Date(transactionToEdit.transactionDate).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
                 description: transactionToEdit.description || '',
-                merchant: transactionToEdit.merchant || '',
                 tags: transactionToEdit.tags || '',
                 isRecurring: transactionToEdit.isRecurring || false,
                 recurringFrequency: transactionToEdit.recurringFrequency || 'Monthly'
@@ -62,6 +75,17 @@ const TransactionFormModal = ({ show, onClose, onSubmit, transactionToEdit, acco
         console.log('Filtered categories for type:', filteredCategories);
     }, [formData.transactionType, categories]);
 
+    const handleTagClick = (tag) => {
+        setSelectedTags(prev => {
+            const isSelected = prev.includes(tag.value);
+            if (isSelected) {
+                return prev.filter(t => t !== tag.value);
+            } else {
+                return [...prev, tag.value];
+            }
+        });
+    };
+
     const handleChange = (e) => {
         const { name, value, type, checked } = e.target;
         console.log('Form field changed:', { name, value, type, checked });
@@ -73,7 +97,6 @@ const TransactionFormModal = ({ show, onClose, onSubmit, transactionToEdit, acco
             const newFormData = {
                 ...prev,
                 [name]: newValue,
-                // Reset category when transaction type changes
                 ...(name === 'transactionType' && { categoryId: '' }),
                 ...(name === 'isRecurring' && !checked && { recurringFrequency: 'Monthly' })
             };
@@ -87,9 +110,8 @@ const TransactionFormModal = ({ show, onClose, onSubmit, transactionToEdit, acco
         setError('');
 
         console.log('Current form data before submission:', formData);
-        console.log('Available categories:', categories);
 
-        // Validate required fields with detailed logging
+        // Validate required fields
         const requiredFields = {
             accountId: formData.accountId,
             categoryId: formData.categoryId,
@@ -97,25 +119,19 @@ const TransactionFormModal = ({ show, onClose, onSubmit, transactionToEdit, acco
             transactionDate: formData.transactionDate
         };
 
-        console.log('Required fields validation:', requiredFields);
-
         const missingFields = Object.entries(requiredFields)
             .filter(([_, value]) => !value)
             .map(([field]) => field);
 
         if (missingFields.length > 0) {
-            console.log('Missing required fields:', missingFields);
             setError(`Please fill in all required fields: ${missingFields.join(', ')}`);
             return;
         }
 
         // Validate numeric fields
         const amount = parseFloat(formData.amount);
-        const accountId = parseInt(formData.accountId, 10);
-        const categoryId = parseInt(formData.categoryId, 10);
-
-        console.log('Parsed numeric values:', { amount, accountId, categoryId });
-        console.log('Selected category:', categories.find(cat => cat.id === categoryId));
+        const accountId = Number(formData.accountId);
+        const categoryId = Number(formData.categoryId);
 
         if (isNaN(amount) || amount <= 0) {
             setError("Amount must be a positive number.");
@@ -129,7 +145,6 @@ const TransactionFormModal = ({ show, onClose, onSubmit, transactionToEdit, acco
 
         const selectedCategory = categories.find(cat => cat.id === categoryId);
         if (!selectedCategory) {
-            console.error('Category not found:', { categoryId, availableCategories: categories });
             setError("Please select a valid category.");
             return;
         }
@@ -141,8 +156,7 @@ const TransactionFormModal = ({ show, onClose, onSubmit, transactionToEdit, acco
             transactionType: formData.transactionType,
             transactionDate: new Date(formData.transactionDate).toISOString(),
             description: formData.description || '',
-            merchant: formData.merchant || '',
-            tags: formData.tags ? formData.tags.split(',').map(tag => tag.trim()).join(', ') : '',
+            tags: selectedTags.join(', '),
             isRecurring: formData.isRecurring || false,
             recurringFrequency: formData.isRecurring ? (formData.recurringFrequency || 'Monthly') : null
         };
@@ -159,12 +173,6 @@ const TransactionFormModal = ({ show, onClose, onSubmit, transactionToEdit, acco
     };
 
     if (!show) return null;
-
-    const renderAccountOption = (account) => (
-        <option key={account.id} value={account.id}>
-            {account.name} ({account.type} - {account.bankName}) - {formatCurrency(account.balance)}
-        </option>
-    );
 
     return (
         <div className="modal" style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.5)' }}>
@@ -224,15 +232,12 @@ const TransactionFormModal = ({ show, onClose, onSubmit, transactionToEdit, acco
                                         <option value="">Select an account</option>
                                         {accounts
                                             .filter(acc => acc.isActive)
-                                            .map(renderAccountOption)}
+                                            .map(acc => (
+                                                <option key={acc.id} value={acc.id}>
+                                                    {acc.name} ({acc.type} - {acc.bankName}) - {formatCurrency(acc.balance)}
+                                                </option>
+                                            ))}
                                     </select>
-                                    {formData.accountId && (
-                                        <small className="text-muted">
-                                            Selected account balance: {formatCurrency(
-                                                accounts.find(acc => acc.id === parseInt(formData.accountId))?.balance || 0
-                                            )}
-                                        </small>
-                                    )}
                                 </div>
                                 <div className="col-md-6">
                                     <label htmlFor="categoryId" className="form-label">Category <span className="text-danger">*</span></label>
@@ -287,17 +292,6 @@ const TransactionFormModal = ({ show, onClose, onSubmit, transactionToEdit, acco
                                     />
                                 </div>
                                 <div className="col-md-6">
-                                    <label htmlFor="merchant" className="form-label">Merchant</label>
-                                    <input
-                                        type="text"
-                                        className="form-control"
-                                        id="merchant"
-                                        name="merchant"
-                                        value={formData.merchant}
-                                        onChange={handleChange}
-                                    />
-                                </div>
-                                <div className="col-md-6">
                                     <label htmlFor="transactionDate" className="form-label">Date</label>
                                     <input
                                         type="date"
@@ -308,6 +302,22 @@ const TransactionFormModal = ({ show, onClose, onSubmit, transactionToEdit, acco
                                         onChange={handleChange}
                                         required
                                     />
+                                </div>
+                                <div className="col-12">
+                                    <label className="form-label">Tags</label>
+                                    <div className="d-flex flex-wrap gap-2">
+                                        {availableTags.map(tag => (
+                                            <button
+                                                key={tag.value}
+                                                type="button"
+                                                className={`btn btn-sm ${selectedTags.includes(tag.value) ? 'btn-primary' : 'btn-outline-primary'}`}
+                                                onClick={() => handleTagClick(tag)}
+                                            >
+                                                <span className="me-1">{tag.icon}</span>
+                                                {tag.label}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
                                 <div className="col-12">
                                     <div className="form-check mb-2">
@@ -340,18 +350,6 @@ const TransactionFormModal = ({ show, onClose, onSubmit, transactionToEdit, acco
                                             </select>
                                         </div>
                                     )}
-                                </div>
-                                <div className="col-12">
-                                    <label htmlFor="tags" className="form-label">Tags (comma-separated)</label>
-                                    <input
-                                        type="text"
-                                        className="form-control"
-                                        id="tags"
-                                        name="tags"
-                                        value={formData.tags}
-                                        onChange={handleChange}
-                                        placeholder="e.g. salary, income"
-                                    />
                                 </div>
                             </div>
                         </div>

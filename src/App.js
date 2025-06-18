@@ -21,6 +21,9 @@ import RegisterPage from './page/RegisterPage';
 import TransactionsPage from './page/TransactionPage';
 import GoalsPage from './page/GoalsPage';
 import BudgetPage from './page/BudgetPage';
+import DebtsPage from './page/Debtspage';
+import InvestmentPage from './page/InvestmentPage';
+import LoanPage from './page/LoanPage';
 
 const MainLayout = () => {
     const location = useLocation();
@@ -76,6 +79,9 @@ function App() {
                     <Route path="/transactions" element={<TransactionsPage />} />
                     <Route path="/goals" element={<GoalsPage />} />
                     <Route path="/budgets" element={<BudgetPage />} />
+                    <Route path="/debts" element={<DebtsPage />} />
+                    <Route path="/investment" element={<InvestmentPage />} />
+                    <Route path="/loans" element={<LoanPage />} />
                 </Route>
 
                 {/*

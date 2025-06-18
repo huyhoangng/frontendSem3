@@ -4,10 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-// --- SỬA LỖI ĐƯỜNG DẪN ---
-// Giả sử file này nằm trong `src/component/category/`,
-// và service nằm trong `src/services/`.
-// Đường dẫn đúng sẽ là đi lên 2 cấp.
+
 import * as categoryService from '../service/categoryService'; 
 
 // --- Constants ---
