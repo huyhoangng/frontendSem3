@@ -12,12 +12,10 @@ const apiClient = axios.create({
   },
 });
 
-// Interceptor để gắn token vào mỗi request
 apiClient.interceptors.request.use(
   config => {
     const token = getAuthToken();
     if (token) {
-      // SỬA LỖI QUAN TRỌNG: Dùng dấu backtick (`) để nội suy biến token
       config.headers['Authorization'] = `Bearer ${token}`;
     }
     return config;
@@ -25,14 +23,12 @@ apiClient.interceptors.request.use(
   error => Promise.reject(error)
 );
 
-// MỚI: Interceptor để xử lý lỗi 401 tự động
 apiClient.interceptors.response.use(
     response => response,
     error => {
         if (error.response && error.response.status === 401) {
-            console.error("Lỗi xác thực: Token không hợp lệ hoặc đã hết hạn. Đang đăng xuất...");
+            console.error("Authentication Error. Logging out...");
             localStorage.removeItem('authToken');
-            // Chuyển hướng về trang đăng nhập
             if (window.location.pathname !== '/login') {
                 window.location.href = '/login';
             }
@@ -46,7 +42,7 @@ export const getAllLoans = async () => {
     const response = await apiClient.get('/');
     return Array.isArray(response.data) ? response.data : [];
   } catch (error) {
-    console.error('Lỗi khi lấy danh sách khoản vay:', error.response?.data || error.message);
+    console.error('Error fetching loans:', error.response?.data || error.message);
     throw error;
   }
 };
@@ -56,7 +52,7 @@ export const createLoan = async (loanData) => {
     const response = await apiClient.post('/', loanData);
     return response.data;
   } catch (error) {
-    console.error('Lỗi khi tạo khoản vay:', error.response?.data || error.message);
+    console.error('Error creating loan:', error.response?.data || error.message);
     throw error;
   }
 };
@@ -64,8 +60,9 @@ export const createLoan = async (loanData) => {
 export const updateLoan = async (id, loanData) => {
   try {
     await apiClient.put(`/${id}`, loanData);
-  } catch (error) {
-    console.error(`Lỗi khi cập nhật khoản vay ${id}:`, error.response?.data || error.message);
+  } catch (error)
+  {
+    console.error(`Error updating loan ${id}:`, error.response?.data || error.message);
     throw error;
   }
 };
@@ -74,7 +71,24 @@ export const deleteLoan = async (id) => {
   try {
     await apiClient.delete(`/${id}`);
   } catch (error) {
-    console.error(`Lỗi khi xóa khoản vay ${id}:`, error.response?.data || error.message);
+    console.error(`Error deleting loan ${id}:`, error.response?.data || error.message);
+    throw error;
+  }
+};
+
+// MỚI: HÀM CÒN THIẾU GÂY RA LỖI ĐÃ ĐƯỢC THÊM VÀO
+/**
+ * Creates a payment for a specific loan.
+ * @param {number} loanId The ID of the loan to pay.
+ * @param {object} paymentData The payment details.
+ * @returns {Promise<object>} The server response after payment.
+ */
+export const createLoanPayment = async (loanId, paymentData) => {
+  try {
+    const response = await apiClient.post(`/${loanId}/payments`, paymentData);
+    return response.data;
+  } catch (error) {
+    console.error(`Error creating payment for loan ${loanId}:`, error.response?.data || error.message);
     throw error;
   }
 };
