@@ -24,6 +24,7 @@ import BudgetPage from './page/BudgetPage';
 import DebtsPage from './page/Debtspage';
 import InvestmentPage from './page/InvestmentPage';
 import LoanPage from './page/LoanPage';
+import PostPage from './page/PostPage';
 
 const MainLayout = () => {
     const location = useLocation();
@@ -82,6 +83,7 @@ function App() {
                     <Route path="/debts" element={<DebtsPage />} />
                     <Route path="/investment" element={<InvestmentPage />} />
                     <Route path="/loans" element={<LoanPage />} />
+                    <Route path="/posts" element={<PostPage />} />
                 </Route>
 
                 {/*

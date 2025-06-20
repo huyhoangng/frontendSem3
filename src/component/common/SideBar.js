@@ -2,24 +2,25 @@ import React, { useState } from 'react';
 import { NavLink, Link, useNavigate } from 'react-router-dom';
 
 import 'bootstrap/dist/css/bootstrap.min.css';
-import 'bootstrap/dist/js/bootstrap.bundle.min.js'; // <<--- VERY IMPORTANT
+import 'bootstrap/dist/js/bootstrap.bundle.min.js';
 
 const SidebarScreen = ({ className }) => {
     const navigate = useNavigate();
-    const [openSubmenuKey, setOpenSubmenuKey] = useState(null); // State to manage open submenu
+    const [openSubmenuKey, setOpenSubmenuKey] = useState(null);
 
+    // <<< THAY ĐỔI: Thêm "Posts" vào đây >>>
     const menuItems = [
         { to: "/overview", icon: "bi-house-fill", text: "Overview" },
         { to: "/wallet", icon: "bi-wallet2", text: "My Account" },
         { to: "/category", icon: "bi-tags-fill", text: "Categories" },
-        
+        { to: "/posts", icon: "bi-file-post", text: "Posts" }, // Mục mới đã được thêm
     ];
 
-    // Structure for dropdown menus
+    // Structure for dropdown menus (đã xóa Posts khỏi đây)
     const dropdownMenus = [
         {
             key: 'pagesManagement',
-            icon: "bi-folder-fill", // Bootstrap Icon
+            icon: "bi-folder-fill",
             text: "Services",
             children: [
                 { header: "Website Content:" },
@@ -31,15 +32,9 @@ const SidebarScreen = ({ className }) => {
                 { to: "/loans", text: "Loan" },
             ]
         },
-        
     ];
 
-    const accountSettingsItems = [
-        { to: "/profile", icon: "bi-person-circle", text: "Profile" },
-        { to: "/setting", icon: "bi-gear-fill", text: "Settings" },
-        { to: "/help-center", icon: "bi-question-circle-fill", text: "Help Center" },
-    ];
-
+    
     const handleLogout = () => {
         localStorage.removeItem('authToken');
         navigate('/login');
@@ -61,7 +56,7 @@ const SidebarScreen = ({ className }) => {
                             <NavLink
                                 className="nav-link d-flex align-items-center"
                                 to={item.to}
-                                end={item.to === "/overview"} // Adjust 'end' for the homepage
+                                end={item.to === "/overview"}
                             >
                                 <i className={`${item.icon} sidebar-icon me-2`}></i>
                                 <span className="nav-link-text">{item.text}</span>
@@ -74,12 +69,11 @@ const SidebarScreen = ({ className }) => {
                         <li className="nav-item" key={menu.key}>
                             <a
                                 className={`nav-link d-flex align-items-center justify-content-between ${openSubmenuKey === menu.key ? '' : 'collapsed'}`}
-                                href="#" // href="#" to prevent navigation on click
+                                href="#"
                                 onClick={(e) => {
                                     e.preventDefault();
                                     toggleSubmenu(menu.key);
                                 }}
-                                // aria-expanded and aria-controls for accessibility
                                 aria-expanded={openSubmenuKey === menu.key}
                                 aria-controls={`collapse-${menu.key}`}
                                 data-bs-toggle="collapse"
@@ -93,9 +87,9 @@ const SidebarScreen = ({ className }) => {
                             </a>
                             <div
                                 className={`collapse submenu-collapse ${openSubmenuKey === menu.key ? 'show' : ''}`}
-                                id={`collapse-${menu.key}`} // ID must match data-bs-target
+                                id={`collapse-${menu.key}`}
                             >
-                                <div className="py-2 collapse-inner rounded my-1 ms-3"> {/* ms-3 for indentation */}
+                                <div className="py-2 collapse-inner rounded my-1 ms-3">
                                     {menu.children.map((child, childIndex) => (
                                         child.header ? (
                                             <h6 className="collapse-header px-3 mt-2 mb-1 text-uppercase small" key={`${menu.key}-header-${childIndex}`}>
@@ -108,7 +102,7 @@ const SidebarScreen = ({ className }) => {
                                                 className="collapse-item d-block px-3 py-2"
                                                 to={child.to}
                                                 key={child.to}
-                                                onClick={() => setOpenSubmenuKey(null)} // Close menu on child item click
+                                                onClick={() => setOpenSubmenuKey(null)}
                                             >
                                                 {child.text}
                                             </Link>
@@ -120,23 +114,7 @@ const SidebarScreen = ({ className }) => {
                     ))}
                 </ul>
 
-                {/* Account and Upgrade/Logout section at the bottom */}
                 <ul className="nav flex-column sidebar-bottom-section mt-auto">
-                    {/* <li className="nav-item featured-box mb-3 mx-2 text-center">
-                        <img src="/images/credit-card.png" className="img-fluid mb-2" alt="Upgrade" style={{ maxWidth: '70px' }} />
-                        <Link className="btn btn-sm btn-danger w-100" to="/upgrade">Upgrade</Link>
-                    </li> */}
-                    {/* {accountSettingsItems.map((item) => (
-                        <li className="nav-item" key={item.to}>
-                            <NavLink
-                                className="nav-link d-flex align-items-center"
-                                to={item.to}
-                            >
-                                <i className={`${item.icon} sidebar-icon me-2`}></i>
-                                <span className="nav-link-text">{item.text}</span>
-                            </NavLink>
-                        </li>
-                    ))} */}
                     <li className="nav-item logout-section border-top pt-2 mx-2 mt-2">
                         <button
                             className="nav-link text-start w-100 d-flex align-items-center"

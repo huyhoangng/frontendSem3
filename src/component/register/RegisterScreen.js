@@ -1,19 +1,19 @@
 // src/pages/RegisterPage.js
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom'; // useNavigate để chuyển hướng sau khi đăng ký
-import { registerUser } from '../service/authService'; // Import hàm API
+import { Link, useNavigate } from 'react-router-dom';
+import { registerUser } from '../service/authService';
 
 const RegisterScreen = () => {
     const navigate = useNavigate();
     const [formData, setFormData] = useState({
         email: '',
         password: '',
-        confirmPassword: '', // Thêm confirmPassword để validate
+        confirmPassword: '',
         firstName: '',
         lastName: '',
-        dateOfBirth: '', // Format YYYY-MM-DD cho input type="date"
+        dateOfBirth: '',
         phoneNumber: '',
-        currency: 'USD', // Mặc định
+        currency: 'USD',
     });
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
@@ -36,31 +36,38 @@ const RegisterScreen = () => {
             return;
         }
 
-        // Chuẩn bị dữ liệu gửi đi (bỏ confirmPassword)
         const dataToSubmit = {
             email: formData.email,
             password: formData.password,
             firstName: formData.firstName,
             lastName: formData.lastName,
-            // API yêu cầu định dạng "YYYY-MM-DDTHH:mm:ss"
-            // Input date trả về "YYYY-MM-DD", cần thêm thời gian
-            dateOfBirth: formData.dateOfBirth ? `${formData.dateOfBirth}T00:00:00` : null, // Gửi null nếu không nhập
+            dateOfBirth: formData.dateOfBirth ? `${formData.dateOfBirth}T00:00:00` : null,
             phoneNumber: formData.phoneNumber,
             currency: formData.currency,
         };
 
         try {
-            const result = await registerUser(dataToSubmit);
-            setSuccess(result.message || 'Registration successful! Please login.'); // API có thể trả về message
-            // Reset form hoặc chuyển hướng
+            // Không cần lưu 'result' nếu API không trả về gì đặc biệt
+            await registerUser(dataToSubmit);
+            
+            // <<< THAY ĐỔI 1: Cập nhật thông báo thành công theo yêu cầu của bạn >>>
+            setSuccess('Registration successful. Please check your email to activate your account.');
+            
+            // Reset form sau khi đăng ký thành công
             setFormData({
                 email: '', password: '', confirmPassword: '', firstName: '',
                 lastName: '', dateOfBirth: '', phoneNumber: '', currency: 'USD',
             });
-            // Chuyển hướng đến trang đăng nhập sau 2 giây
+
+            // <<< THAY ĐỔI 2: Loại bỏ việc tự động chuyển hướng >>>
+            // Lý do: Người dùng cần phải vào mail để kích hoạt trước khi có thể đăng nhập.
+            // Việc chuyển hướng họ đến trang login ngay sẽ gây ra trải nghiệm không tốt.
+            /* 
             setTimeout(() => {
                 navigate('/login');
             }, 2000);
+            */
+
         } catch (err) {
             setError(err.message || 'Registration failed. Please try again.');
         } finally {
@@ -73,8 +80,7 @@ const RegisterScreen = () => {
             <div className="card shadow-lg" style={{ width: '100%', maxWidth: '500px' }}>
                 <div className="card-body p-4 p-md-5">
                     <div className="text-center mb-4">
-                        {/* <img src="/path-to-your-logo.png" alt="Logo" style={{width: '100px', marginBottom: '1rem'}} /> */}
-                        <i className="bi-box display-4 text-primary"></i> {/* Hoặc logo của bạn */}
+                        <i className="bi-box display-4 text-primary"></i>
                         <h2 className="card-title mt-2">Create Account</h2>
                         <p className="text-muted">Join us and start managing your finances!</p>
                     </div>
@@ -133,7 +139,7 @@ const RegisterScreen = () => {
                                 value={formData.password}
                                 onChange={handleChange}
                                 required
-                                minLength="6" // Thêm validate cơ bản
+                                minLength="6"
                             />
                         </div>
 
@@ -154,7 +160,7 @@ const RegisterScreen = () => {
                             <div className="col-md-7 mb-3">
                                 <label htmlFor="dateOfBirth" className="form-label">Date of Birth</label>
                                 <input
-                                    type="date" // Input type date sẽ trả về format YYYY-MM-DD
+                                    type="date"
                                     className="form-control"
                                     id="dateOfBirth"
                                     name="dateOfBirth"
@@ -174,7 +180,6 @@ const RegisterScreen = () => {
                                     <option value="USD">USD</option>
                                     <option value="VND">VND</option>
                                     <option value="EUR">EUR</option>
-                                    {/* Thêm các loại tiền tệ khác nếu cần */}
                                 </select>
                             </div>
                         </div>

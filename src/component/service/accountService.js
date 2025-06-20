@@ -66,12 +66,11 @@ export const formatCurrency = (amount, currency = 'USD') => {
     }).format(amount);
 };
 
-// --- Hàm export cho ACCOUNTS ---
-
 export const getAccounts = async () => {
     try {
         const response = await apiClient.get('/');
         const accountsData = Array.isArray(response.data) ? response.data : [];
+        // Áp dụng chuẩn hóa cho mọi account nhận về
         return accountsData.map(normalizeAccountFromApi);
     } catch (error) {
         console.error("API Error - getAccounts:", error.response?.data || error.message);

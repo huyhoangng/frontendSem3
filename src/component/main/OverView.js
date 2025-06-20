@@ -1,12 +1,11 @@
 // src/pages/OverviewPage.js
 import React, { useState, useEffect } from 'react';
-import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, Title } from 'chart.js';
+import { Chart as ChartJS, ArcElement, Tooltip, Legend, Title } from 'chart.js';
+import ChartDataLabels from 'chartjs-plugin-datalabels';
 import { Pie } from 'react-chartjs-2';
-// Đã xóa getRecentTransactions khỏi import vì không còn dùng
-import { getOverviewData, getAccountsSummary, getTransactionSummary } from '../service/dashboardService';
+import { getOverviewData, getAccountsSummary } from '../service/dashboardService';
 
-// Đăng ký các components cần thiết cho Chart.js
-ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, Title);
+ChartJS.register(ArcElement, Tooltip, Legend, Title, ChartDataLabels);
 
 // --- Helpers ---
 const formatCurrency = (amount, currency = 'USD') => {
@@ -18,13 +17,7 @@ const formatCurrency = (amount, currency = 'USD') => {
     }).format(amount);
 };
 
-const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('vi-VN');
-};
-
 // --- Component con ---
-
 const TitleGroup = ({ title, subtitle }) => (
     <div className="title-group mb-3"> 
         <h1 className="h2 mb-0">{title}</h1>
@@ -60,75 +53,48 @@ const BalanceCard = ({ account, isSelected }) => (
         <small>Balance for {account.accountName}</small>
         <h2 className="mt-2 mb-3">{formatCurrency(account.balance, account.currency)}</h2>
         <div className="d-flex mt-3">
-            <div>
-                <small>Account ID</small>
-                <p className="mb-0">{account.accountId}</p>
-            </div>
-            <div className="ms-auto text-end">
-                <small>Currency</small>
-                <p className="mb-0">{account.currency}</p>
-            </div>
+            <div><small>Account ID</small><p className="mb-0">{account.accountId}</p></div>
+            <div className="ms-auto text-end"><small>Currency</small><p className="mb-0">{account.currency}</p></div>
         </div>
     </div>
 );
 
-// ĐÃ XÓA component RecentTransactionsBlock
-
+// <<< THAY ĐỔI: Đơn giản hóa component để chỉ căn giữa ngang >>>
 const IncomeExpenseChart = ({ overview, currency = 'VND' }) => {
+    const total = overview.totalIncome + overview.totalExpense;
+
     const data = {
         labels: ['Income', 'Expense'],
         datasets: [{
             data: [overview.totalIncome, overview.totalExpense],
             backgroundColor: ['rgba(40, 167, 69, 0.8)', 'rgba(220, 53, 69, 0.8)'],
-            borderColor: ['rgba(40, 167, 69, 1)', 'rgba(220, 53, 69, 1)'],
-            borderWidth: 1,
+            borderColor: ['#ffffff'],
+            borderWidth: 2,
         }]
     };
-    const options = {
-        responsive: true,
-        plugins: {
-            legend: { position: 'bottom' },
-            tooltip: { callbacks: { label: (context) => `${context.label}: ${formatCurrency(context.raw, currency)}` } }
-        }
-    };
-    return (
-        <div className="custom-block bg-white p-4 h-100">
-            <h5 className="mb-4 text-center">Income vs Expense ({currency})</h5>
-            <div style={{ height: '300px', position: 'relative' }}>
-                <Pie data={data} options={options} />
-            </div>
-        </div>
-    );
-};
 
-const TransactionSummaryChart = ({ summary, currency = 'VND' }) => {
-    if (!Array.isArray(summary) || summary.length === 0) {
-        return (
-            <div className="custom-block bg-white p-4 h-100 d-flex align-items-center justify-content-center">
-                <p className="text-muted">No expense data to display.</p>
-            </div>
-        );
-    }
-    const data = {
-        labels: summary.map(item => item.categoryName),
-        datasets: [{
-            data: summary.map(item => item.totalAmount),
-            backgroundColor: summary.map(item => item.categoryColor || '#CCCCCC'),
-            borderColor: '#fff',
-            borderWidth: 1,
-        }]
-    };
     const options = {
         responsive: true,
         plugins: {
             legend: { position: 'bottom' },
-            tooltip: { callbacks: { label: (context) => `${context.label}: ${formatCurrency(context.raw, currency)}` } }
+            title: { display: true, text: `Income vs Expense (${currency})`, font: { size: 16 } },
+            tooltip: { callbacks: { label: (context) => `${context.label}: ${formatCurrency(context.raw, currency)}` } },
+            datalabels: {
+                formatter: (value) => {
+                    if (total === 0) return '0%';
+                    const percentage = (value / total * 100).toFixed(1) + '%';
+                    return percentage;
+                },
+                color: '#fff',
+                font: { weight: 'bold', size: 14 }
+            }
         }
     };
+
     return (
         <div className="custom-block bg-white p-4 h-100">
-            <h5 className="mb-4 text-center">Expense Summary by Category</h5>
-            <div style={{ height: '300px', position: 'relative' }}>
+            {/* Div này để giới hạn kích thước và căn giữa bằng margin */}
+            <div style={{ maxWidth: '350px', margin: '0 auto', position: 'relative' }}>
                 <Pie data={data} options={options} />
             </div>
         </div>
@@ -136,12 +102,9 @@ const TransactionSummaryChart = ({ summary, currency = 'VND' }) => {
 };
 
 // --- Component chính ---
-
 const OverviewPage = () => {
     const [overview, setOverview] = useState(null);
     const [accounts, setAccounts] = useState([]);
-    const [transactionSummary, setTransactionSummary] = useState([]); 
-    // ĐÃ XÓA state recentTransactions
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
     const [selectedAccountId, setSelectedAccountId] = useState(null);
@@ -155,9 +118,7 @@ const OverviewPage = () => {
     };
 
     const calculateTotalBalance = (accounts, currency) => {
-        return accounts.reduce((total, account) => {
-            return total + (account.currency === currency ? account.balance : 0);
-        }, 0);
+        return accounts.reduce((total, account) => total + (account.currency === currency ? account.balance : 0), 0);
     };
 
     useEffect(() => {
@@ -165,17 +126,14 @@ const OverviewPage = () => {
             setIsLoading(true);
             setError(null);
             try {
-                // ĐÃ XÓA getRecentTransactions khỏi lệnh gọi
-                const [overviewData, accountsSummaryData, transSummaryData] = await Promise.all([
+                const [overviewData, accountsSummaryData] = await Promise.all([
                     getOverviewData(),
                     getAccountsSummary(),
-                    getTransactionSummary()
                 ]);
 
                 setOverview(overviewData);
                 const accountsData = accountsSummaryData.accounts || [];
                 setAccounts(accountsData);
-                setTransactionSummary(Array.isArray(transSummaryData) ? transSummaryData : []); 
                 
                 if (accountsData.length > 0 && !selectedAccountId) {
                     setSelectedAccountId(accountsData[0].accountId);
@@ -188,7 +146,8 @@ const OverviewPage = () => {
         };
 
         fetchAllData();
-    }, [selectedAccountId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); 
 
     if (isLoading) {
         return <div className="container text-center mt-5"><div className="spinner-border text-primary" role="status"><span className="visually-hidden">Loading...</span></div></div>;
@@ -205,22 +164,6 @@ const OverviewPage = () => {
         <div className="overview-page-content container-fluid">
             <TitleGroup title="Overview" subtitle="Welcome back!" />
 
-            <div className="row mb-4">
-                <div className="col-md-4">
-                    <select 
-                        className="form-select"
-                        value={selectedAccountId || ''}
-                        onChange={(e) => setSelectedAccountId(e.target.value)}
-                    >
-                        {accounts.map(account => (
-                            <option key={account.accountId} value={account.accountId}>
-                                {account.accountName} ({account.currency})
-                            </option>
-                        ))}
-                    </select>
-                </div>
-            </div>
-
             {overview && (
                 <StatsGroup 
                     income={overview.totalIncome}
@@ -231,19 +174,24 @@ const OverviewPage = () => {
             )}
             
             <div className="row g-4 my-4">
-                {overview && (
-                    <div className="col-lg-6">
+                <div className="col-lg-7">
+                    {overview && (
                         <IncomeExpenseChart overview={overview} currency={selectedCurrency} />
-                    </div>
-                )}
-                <div className="col-lg-6">
-                   <TransactionSummaryChart summary={transactionSummary} currency={selectedCurrency} />
+                    )}
                 </div>
-            </div>
+                <div className="col-lg-5 d-flex flex-column">
+                    <select 
+                        className="form-select mb-4"
+                        value={selectedAccountId || ''}
+                        onChange={(e) => setSelectedAccountId(Number(e.target.value))}
+                    >
+                        {accounts.map(account => (
+                            <option key={account.accountId} value={account.accountId}>
+                                {account.accountName} ({account.currency})
+                            </option>
+                        ))}
+                    </select>
 
-            <div className="row g-4 my-4">
-                {/* ĐÃ XÓA CỘT BÊN PHẢI (Recent Transactions) */}
-                <div className="col-lg-12 d-flex flex-column">
                     {accounts.length > 0 ? (
                         accounts.map(acc => (
                             <BalanceCard 

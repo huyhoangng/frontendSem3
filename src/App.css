@@ -314,3 +314,50 @@ body {
   font-size: 0.9rem;
   vertical-align: middle; /* Căn icon và text tốt hơn */
 }
+/* src/App.css hoặc file CSS tương ứng */
+
+/* Container chính cho danh sách giao dịch */
+.transaction-list-container {
+  background-color: #f8f9fa; /* Nền xám rất nhẹ */
+  border-radius: 0.5rem;
+  padding: 1rem;
+}
+
+/* Card cho mỗi giao dịch */
+.transaction-card {
+  transition: box-shadow 0.2s ease-in-out, transform 0.2s ease-in-out;
+  border: 1px solid #e9ecef;
+}
+
+.transaction-card:hover {
+  box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.1) !important;
+  transform: translateY(-2px);
+}
+
+/* Icon cho loại giao dịch (Thu/Chi) */
+.transaction-icon {
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    flex-shrink: 0; /* Đảm bảo icon không bị co lại */
+}
+
+/* Nền và màu cho icon */
+.icon-income {
+    background-color: rgba(25, 135, 84, 0.1); /* Màu xanh lá nhạt */
+    color: #198754; /* Màu xanh lá đậm */
+}
+
+.icon-expense {
+    background-color: rgba(220, 53, 69, 0.1); /* Màu đỏ nhạt */
+    color: #dc3545; /* Màu đỏ đậm */
+}
+
+/* Căn chỉnh dropdown actions */
+.transaction-actions .dropdown-toggle::after {
+    display: none; /* Bỏ mũi tên mặc định của dropdown */
+}
