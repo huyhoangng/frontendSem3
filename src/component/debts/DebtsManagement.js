@@ -85,7 +85,7 @@ const debtsService = {
   }
 };
 
-// --- Payment Modal Component (Không đổi) ---
+// --- Payment Modal Component ---
 const PaymentModal = ({ debt, onProcess, onCancel }) => {
   const [amount, setAmount] = useState('');
   useEffect(() => {
@@ -100,7 +100,9 @@ const PaymentModal = ({ debt, onProcess, onCancel }) => {
       onProcess(parseFloat(amount));
     }
   };
-  const formatCurrency = (num) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(num);
+  // <<< THAY ĐỔI Ở ĐÂY >>>
+  const formatCurrency = (num) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(num);
+
   return (
     <div className="modal fade show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
       <div className="modal-dialog modal-dialog-centered">
@@ -122,10 +124,8 @@ const PaymentModal = ({ debt, onProcess, onCancel }) => {
   );
 };
 
-// --- Debt Form Component (ĐÃ SỬA LỖI NULL) ---
+// --- Debt Form Component ---
 const DebtForm = ({ debt, accounts, onSave, onCancel }) => {
-  // <<< SỬA LỖI 1: Đảm bảo không có giá trị null nào được truyền vào state ban đầu.
-  // Sử dụng optional chaining (?.), và toán tử || để cung cấp giá trị mặc định.
   const [formData, setFormData] = useState({
     debtId: debt?.debtId || 0,
     debtName: debt?.debtName || '',
@@ -181,10 +181,11 @@ const DebtForm = ({ debt, accounts, onSave, onCancel }) => {
   );
 };
 
-// --- Debt Card Component (Đã thêm nút thanh toán) ---
+// --- Debt Card Component ---
 const DebtCard = ({ debt, onEdit, onDelete, onMakePayment }) => {
-  const formatCurrency = (amount) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
-  const formatDate = (dateString) => new Date(dateString).toLocaleDateString('en-GB');
+  // <<< THAY ĐỔI Ở ĐÂY >>>
+  const formatCurrency = (amount) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+  const formatDate = (dateString) => new Date(dateString).toLocaleDateString('en-US'); // Changed to US format for consistency
   const getDebtTypeBadge = (type) => {
     const badges = { 'Credit Card': 'bg-danger', 'Personal Loan': 'bg-primary', 'Mortgage': 'bg-success', 'Car Loan': 'bg-info text-dark', 'Student Loan': 'bg-warning text-dark', 'Other': 'bg-secondary' };
     return badges[type] || badges['Other'];
@@ -214,7 +215,7 @@ const DebtCard = ({ debt, onEdit, onDelete, onMakePayment }) => {
   );
 };
 
-// --- Main Debts Management Component (Đã cập nhật logic xử lý) ---
+// --- Main Debts Management Component ---
 const DebtsManagement = () => {
   const [debts, setDebts] = useState([]);
   const [accounts, setAccounts] = useState([]);
@@ -260,7 +261,7 @@ const DebtsManagement = () => {
 
   const handleSaveDebt = async (debtData) => {
     try {
-      setError(null); // Xóa lỗi cũ trước khi thực hiện hành động mới
+      setError(null);
       if (editingDebt) {
         await debtsService.updateDebt(editingDebt.debtId, debtData);
       } else {
@@ -290,10 +291,9 @@ const DebtsManagement = () => {
     if (!payingDebt) return;
     setError(null);
 
-    // <<< SỬA LỖI 2: Thêm kiểm tra nghiệp vụ phía client
     if (paymentAmount > payingDebt.currentBalance) {
       setError(`Payment amount cannot be greater than the current balance of ${formatCurrency(payingDebt.currentBalance)}.`);
-      return; // Dừng lại, không gọi API
+      return;
     }
 
     try {
@@ -313,7 +313,8 @@ const DebtsManagement = () => {
   const activeDebts = debts.filter(d => d.isActive);
   const calculateTotalDebt = () => activeDebts.reduce((total, debt) => total + debt.currentBalance, 0);
   const calculateTotalMinimumPayment = () => activeDebts.reduce((total, debt) => total + debt.minimumPayment, 0);
-  const formatCurrency = (amount) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
+  // <<< THAY ĐỔI Ở ĐÂY >>>
+  const formatCurrency = (amount) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 
   if (loading) { return ( <div className="d-flex justify-content-center align-items-center" style={{ height: '80vh' }}><div className="spinner-border text-primary" role="status"><span className="visually-hidden">Loading...</span></div></div> ); }
 

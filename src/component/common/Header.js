@@ -43,7 +43,7 @@ const HeaderComponent = ({ className }) => {
         <header className={`navbar sticky-top flex-md-nowrap p-0 shadow-sm bg-white ${className || ''}`}>
             <div className="col-md-3 col-lg-3 me-0 px-3 fs-6 d-flex align-items-center">
                 <Link className="navbar-brand" to="/overview" style={{color: '#dc3545', fontWeight: 'bold', fontSize: '1.25rem'}}> {/* Đổi link gốc nếu cần */}
-                    <i className="bi-box me-2"></i> Mini Finance
+                    <i className="bi-box me-2"></i> Personal Finance
                 </Link>
             </div>
 

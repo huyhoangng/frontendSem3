@@ -1,5 +1,6 @@
 // src/pages/OverviewPage.js
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, Title } from 'chart.js';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
 import { Pie } from 'react-chartjs-2';
@@ -11,13 +12,11 @@ ChartJS.register(ArcElement, Tooltip, Legend, Title, ChartDataLabels);
 const formatCurrency = (amount, currency = 'USD') => {
     if (typeof amount !== 'number') return '';
     const locale = currency === 'USD' ? 'en-US' : 'vi-VN';
-    return new Intl.NumberFormat(locale, { 
-        style: 'currency', 
-        currency: currency 
-    }).format(amount);
+    return new Intl.NumberFormat(locale, { style: 'currency', currency: currency }).format(amount);
 };
 
 // --- Component con ---
+
 const TitleGroup = ({ title, subtitle }) => (
     <div className="title-group mb-3"> 
         <h1 className="h2 mb-0">{title}</h1>
@@ -25,28 +24,33 @@ const TitleGroup = ({ title, subtitle }) => (
     </div>
 );
 
-const StatsGroup = ({ income, expense, netWorth, currency = 'VND' }) => (
-    <div className="row g-4">
-        <div className="col-md-4">
-            <div className="custom-block bg-white text-center p-3">
-                <h6 className="text-muted mb-2">Total Income</h6>
-                <h3 className="text-success mb-0">{formatCurrency(income, currency)}</h3>
+// <<< THAY ĐỔI Ở ĐÂY: Xóa Net Worth và điều chỉnh layout >>>
+const StatsGroup = ({ income, expense, currency = 'VND' }) => {
+    const navigate = useNavigate();
+
+    const handleNavigate = (filter) => {
+        navigate('/transactions', { state: { defaultFilter: filter } });
+    };
+
+    return (
+        // Sử dụng justify-content-center để căn giữa 2 khối còn lại
+        <div className="row g-4 justify-content-center">
+            <div className="col-md-5 col-lg-4"> {/* Điều chỉnh kích thước cột */}
+                <div className="custom-block bg-white text-center p-3 clickable-stat" onClick={() => handleNavigate('Income')}>
+                    <h6 className="text-muted mb-2">Total Income</h6>
+                    <h3 className="text-success mb-0">{formatCurrency(income, currency)}</h3>
+                </div>
             </div>
-        </div>
-        <div className="col-md-4">
-            <div className="custom-block bg-white text-center p-3">
-                <h6 className="text-muted mb-2">Total Expense</h6>
-                <h3 className="text-danger mb-0">{formatCurrency(expense, currency)}</h3>
+            <div className="col-md-5 col-lg-4"> {/* Điều chỉnh kích thước cột */}
+                <div className="custom-block bg-white text-center p-3 clickable-stat" onClick={() => handleNavigate('Expense')}>
+                    <h6 className="text-muted mb-2">Total Expense</h6>
+                    <h3 className="text-danger mb-0">{formatCurrency(expense, currency)}</h3>
+                </div>
             </div>
+            {/* Khối Net Worth đã được xóa */}
         </div>
-        <div className="col-md-4">
-            <div className="custom-block bg-white text-center p-3">
-                <h6 className="text-muted mb-2">Net Worth</h6>
-                <h3 className="text-primary mb-0">{formatCurrency(netWorth, currency)}</h3>
-            </div>
-        </div>
-    </div>
-);
+    );
+};
 
 const BalanceCard = ({ account, isSelected }) => (
     <div className={`custom-block custom-block-balance mb-4 ${isSelected ? 'border-primary' : ''}`}>
@@ -59,9 +63,8 @@ const BalanceCard = ({ account, isSelected }) => (
     </div>
 );
 
-// <<< THAY ĐỔI: Đơn giản hóa component để chỉ căn giữa ngang >>>
 const IncomeExpenseChart = ({ overview, currency = 'VND' }) => {
-    const total = overview.totalIncome + overview.totalExpense;
+    const total = (overview.totalIncome || 0) + (overview.totalExpense || 0);
 
     const data = {
         labels: ['Income', 'Expense'],
@@ -93,7 +96,6 @@ const IncomeExpenseChart = ({ overview, currency = 'VND' }) => {
 
     return (
         <div className="custom-block bg-white p-4 h-100">
-            {/* Div này để giới hạn kích thước và căn giữa bằng margin */}
             <div style={{ maxWidth: '350px', margin: '0 auto', position: 'relative' }}>
                 <Pie data={data} options={options} />
             </div>
@@ -117,9 +119,7 @@ const OverviewPage = () => {
         return accounts[0]?.currency || 'USD';
     };
 
-    const calculateTotalBalance = (accounts, currency) => {
-        return accounts.reduce((total, account) => total + (account.currency === currency ? account.balance : 0), 0);
-    };
+    // <<< THAY ĐỔI Ở ĐÂY: Xóa hàm calculateTotalBalance >>>
 
     useEffect(() => {
         const fetchAllData = async () => {
@@ -158,17 +158,16 @@ const OverviewPage = () => {
     }
 
     const selectedCurrency = getSelectedCurrency();
-    const totalBalance = calculateTotalBalance(accounts, selectedCurrency);
 
     return (
         <div className="overview-page-content container-fluid">
             <TitleGroup title="Overview" subtitle="Welcome back!" />
 
             {overview && (
+                // <<< THAY ĐỔI Ở ĐÂY: Không truyền prop netWorth nữa >>>
                 <StatsGroup 
                     income={overview.totalIncome}
                     expense={overview.totalExpense}
-                    netWorth={totalBalance}
                     currency={selectedCurrency}
                 />
             )}

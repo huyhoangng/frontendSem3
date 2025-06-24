@@ -1,5 +1,5 @@
 // src/component/transaction/TransactionManagement.js
-import React, { useState, useEffect, useCallback, memo } from 'react';
+import React, { useState, useEffect, useCallback, memo, useMemo } from 'react';
 import { getTransactions, createTransaction, updateTransaction, deleteTransaction } from '../service/transactionService';
 import { getAccounts } from '../service/accountService';
 import { getCategories } from '../service/categoryService';
@@ -59,7 +59,7 @@ const TransactionFormModal = ({ show, onClose, onSubmit, transactionToEdit, acco
                                 <div className="col-md-6"><label htmlFor="amount" className="form-label">Amount <span className="text-danger">*</span></label><input type="number" step="0.01" min="0" className="form-control" id="amount" name="amount" value={formData.amount} onChange={handleChange} required /></div>
                                 <div className="col-md-6"><label htmlFor="transactionType" className="form-label">Type <span className="text-danger">*</span></label><select className="form-select" id="transactionType" name="transactionType" value={formData.transactionType} onChange={handleChange} required><option value="Expense">Expense</option><option value="Income">Income</option></select></div>
                                 <div className="col-md-6"><label htmlFor="accountId" className="form-label">Account <span className="text-danger">*</span></label><select className="form-select" id="accountId" name="accountId" value={formData.accountId} onChange={handleChange} required><option value="">Select an account</option>{accounts.filter(acc => acc.isActive).map(acc => (<option key={acc.id} value={acc.id}>{acc.name} ({formatCurrency(acc.balance)})</option>))}</select></div>
-                                <div className="col-md-6"><label htmlFor="categoryId" className="form-label">Category <span className="text-danger">*</span></label><select className="form-select" id="categoryId" name="categoryId" value={formData.categoryId} onChange={handleChange} required><option value="">Select a category</option>{categories.filter(cat => cat.isActive && cat.type === formData.transactionType.toUpperCase()).map(cat => (<option key={cat.id} value={cat.id}>{cat.name}</option>))}</select></div>
+                                <div className="col-md-6"><label htmlFor="categoryId" className="form-label">Category <span className="text-danger">*</span></label><select className="form-select" id="categoryId" name="categoryId" value={formData.categoryId} onChange={handleChange} required><option value="">Select a category</option>{categories.filter(cat => cat.isActive && cat.type.toUpperCase() === formData.transactionType.toUpperCase()).map(cat => (<option key={cat.id} value={cat.id}>{cat.name}</option>))}</select></div>
                                 <div className="col-12"><label htmlFor="description" className="form-label">Description</label><input type="text" className="form-control" id="description" name="description" value={formData.description} onChange={handleChange}/></div>
                                 <div className="col-md-6"><label htmlFor="transactionDate" className="form-label">Date</label><input type="date" className="form-control" id="transactionDate" name="transactionDate" value={formData.transactionDate} onChange={handleChange} required/></div>
                                 <div className="col-12"><label className="form-label">Tags</label><div className="d-flex flex-wrap gap-2">{availableTags.map(tag => (<button key={tag.value} type="button" className={`btn btn-sm ${selectedTags.includes(tag.value) ? 'btn-primary' : 'btn-outline-primary'}`} onClick={() => handleTagClick(tag)}><span className="me-1">{tag.icon}</span>{tag.label}</button>))}</div></div>
@@ -95,6 +95,7 @@ function TransactionManagement() {
     const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
     const [balanceChartData, setBalanceChartData] = useState({ labels: [], datasets: [] });
     const [expenseChartData, setExpenseChartData] = useState({ labels: [], datasets: [] });
+    const [filterView, setFilterView] = useState('All'); 
 
     const handleApiError = useCallback((err, context = 'operation') => {
         if (err.response && err.response.status === 401) { setError('Your session has expired. Redirecting to login page...'); localStorage.removeItem('authToken'); localStorage.removeItem('userId'); setTimeout(() => { if (window.location.pathname !== '/login') window.location.href = '/login'; }, 3000); } else { setError(`Error during ${context}: ${err.message || 'An unknown error occurred.'}`); }
@@ -139,23 +140,11 @@ function TransactionManagement() {
             setBalanceChartData({
                 labels: uniqueDates.map(d => formatDateForChart(d)),
                 datasets: [{ 
-                    label: 'Net Balance', 
-                    data: balanceDataPoints, 
-                    fill: true, 
-                    backgroundColor: 'rgba(54, 162, 235, 0.2)', 
-                    borderColor: 'rgba(54, 162, 235, 1)', 
-                    tension: 0.4, 
-                    // <<< SỬA ĐỔI >>> Ẩn điểm dữ liệu mặc định
-                    pointRadius: 0,
-                    // <<< SỬA ĐỔI >>> Chỉ hiển thị điểm khi hover
-                    pointHoverRadius: 6,
-                    // <<< SỬA ĐỔI >>> Tăng vùng nhận diện hover để dễ sử dụng
-                    pointHitRadius: 20,
-                    pointBackgroundColor: 'rgba(54, 162, 235, 1)'
+                    label: 'Net Balance', data: balanceDataPoints, fill: true, backgroundColor: 'rgba(54, 162, 235, 0.2)', borderColor: 'rgba(54, 162, 235, 1)', tension: 0.4, 
+                    pointRadius: 0, pointHoverRadius: 6, pointHitRadius: 20, pointBackgroundColor: 'rgba(54, 162, 235, 1)'
                 }]
             });
 
-            // Expense chart logic (không thay đổi)
             const expenseTransactions = sortedTransactions.filter(tx => tx.transactionType === 'Expense');
             const expensesByCategory = {};
             expenseTransactions.forEach(tx => {
@@ -182,88 +171,66 @@ function TransactionManagement() {
         }
     }, [allTransactions, currentMonth, currentYear]);
 
-
     const handleOpenModal = (transaction = null) => { setTransactionToEdit(transaction); setIsModalOpen(true); };
     const handleCloseModal = () => { setIsModalOpen(false); setTransactionToEdit(null); };
     const handleSaveTransaction = async (payload, id) => { try { if (id) { await updateTransaction(id, payload); } else { await createTransaction(payload); } await fetchAllData(); } catch (err) { throw new Error(err.response?.data?.title || err.message || 'An error occurred.'); } };
     const handleDelete = async (id) => { if (window.confirm('Are you sure?')) { try { await deleteTransaction(id); await fetchAllData(); } catch (err) { handleApiError(err, 'deleting transaction'); } } };
 
-    // <<< SỬA ĐỔI >>> Cấu hình tùy chọn cho biểu đồ để sửa lỗi
-    const balanceChartOptions = { 
-        responsive: true, 
-        maintainAspectRatio: false, 
-        plugins: { 
-            legend: { display: false }, 
-            title: { display: true, text: 'Balance Trend This Month' },
-            // <<< SỬA ĐỔI >>> Cải thiện tooltip
-            tooltip: { 
-                mode: 'index', // Hiển thị tooltip cho tất cả dataset tại một điểm trên trục x
-                intersect: false, // Không cần phải hover chính xác vào điểm dữ liệu
-                callbacks: { 
-                    label: (context) => `Balance: ${formatCurrency(context.parsed.y)}` 
-                } 
-            } 
-        }, 
-        scales: { 
-            y: { 
-                ticks: { 
-                    callback: (value) => formatCurrency(value),
-                    // <<< SỬA ĐỔI >>> Giới hạn số vạch chia để tránh số xấu
-                    maxTicksLimit: 6 
-                } 
-            } 
-        } 
-    };
+    const balanceChartOptions = { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, title: { display: true, text: 'Balance Trend This Month' }, tooltip: { mode: 'index', intersect: false, callbacks: { label: (context) => `Balance: ${formatCurrency(context.parsed.y)}` } } }, scales: { y: { ticks: { callback: (value) => formatCurrency(value), maxTicksLimit: 6 } } } };
+    const expenseChartOptions = { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' }, title: { display: true, text: 'Cumulative Expense by Category This Month' }, tooltip: { mode: 'index', intersect: false, callbacks: { label: (context) => `${context.dataset.label}: ${formatCurrency(context.parsed.y)}` } } }, scales: { y: { ticks: { callback: (value) => formatCurrency(value) } } } };
 
-    const expenseChartOptions = { 
-        responsive: true, 
-        maintainAspectRatio: false, 
-        plugins: { 
-            legend: { position: 'top' }, 
-            title: { display: true, text: 'Cumulative Expense by Category This Month' },
-            tooltip: { 
-                mode: 'index',
-                intersect: false,
-                callbacks: { 
-                    label: (context) => `${context.dataset.label}: ${formatCurrency(context.parsed.y)}` 
-                } 
-            } 
-        }, 
-        scales: { 
-            y: { 
-                ticks: { 
-                    callback: (value) => formatCurrency(value)
-                } 
-            } 
-        } 
-    };
+    const transactionsForCurrentMonth = useMemo(() => {
+        return allTransactions.filter(tx => {
+            const txDate = new Date(tx.transactionDate);
+            return txDate.getMonth() === currentMonth && txDate.getFullYear() === currentYear;
+        });
+    }, [allTransactions, currentMonth, currentYear]);
 
-    const transactionsForCurrentMonth = allTransactions.filter(tx => {
-        const txDate = new Date(tx.transactionDate);
-        return txDate.getMonth() === currentMonth && txDate.getFullYear() === currentYear;
-    });
+    const displayTransactions = useMemo(() => {
+        if (filterView === 'Income') {
+            return transactionsForCurrentMonth.filter(tx => tx.transactionType === 'Income');
+        }
+        if (filterView === 'Expense') {
+            return transactionsForCurrentMonth.filter(tx => tx.transactionType === 'Expense');
+        }
+        return transactionsForCurrentMonth;
+    }, [transactionsForCurrentMonth, filterView]);
 
     return (
         <div className="container mt-4">
             <div className="d-flex justify-content-between align-items-center mb-4"><h1 className="h2">Transactions</h1><button className="btn btn-primary" onClick={() => handleOpenModal()}><i className="bi bi-plus-circle-fill me-2"></i> Add Transaction</button></div>
+            
+            <div className="btn-group w-100 mb-4" role="group">
+                <button type="button" className={`btn ${filterView === 'All' ? 'btn-primary' : 'btn-outline-primary'}`} onClick={() => setFilterView('All')}>All</button>
+                <button type="button" className={`btn ${filterView === 'Income' ? 'btn-success' : 'btn-outline-success'}`} onClick={() => setFilterView('Income')}>Income</button>
+                <button type="button" className={`btn ${filterView === 'Expense' ? 'btn-danger' : 'btn-outline-danger'}`} onClick={() => setFilterView('Expense')}>Expense</button>
+            </div>
+            
             {isLoading && <div className="text-center"><div className="spinner-border"></div></div>}
             {error && <div className="alert alert-danger">{error}</div>}
             
             {!isLoading && !error && (
                 <>
-                    {transactionsForCurrentMonth.length > 0 ? (
+                    {displayTransactions.length > 0 ? (
                         <div className="row g-4 mb-4">
-                            <div className="col-lg-6"><div className="card shadow-sm h-100"><div className="card-body"><div style={{ height: '300px' }}><Line options={balanceChartOptions} data={balanceChartData} /></div></div></div></div>
-                            <div className="col-lg-6"><div className="card shadow-sm h-100"><div className="card-body"><div style={{ height: '300px' }}><Line options={expenseChartOptions} data={expenseChartData} /></div></div></div></div>
+                            {filterView === 'All' && (
+                                <>
+                                    <div className="col-lg-6"><div className="card shadow-sm h-100"><div className="card-body"><div style={{ height: '300px' }}><Line options={balanceChartOptions} data={balanceChartData} /></div></div></div></div>
+                                    <div className="col-lg-6"><div className="card shadow-sm h-100"><div className="card-body"><div style={{ height: '300px' }}><Line options={expenseChartOptions} data={expenseChartData} /></div></div></div></div>
+                                </>
+                            )}
+                            {filterView === 'Expense' && (
+                                <div className="col-12"><div className="card shadow-sm h-100"><div className="card-body"><div style={{ height: '300px' }}><Line options={expenseChartOptions} data={expenseChartData} /></div></div></div></div>
+                            )}
                         </div>
                     ) : (
-                        <div className="alert alert-info text-center">No transaction data available for the current month to display charts.</div>
+                        <div className="alert alert-info text-center">{`No ${filterView.toLowerCase()} transaction data available for the current month.`}</div>
                     )}
                     
                     <div className="transaction-list-container">
-                        <h3 className="h5 mb-3">Transactions This Month</h3>
-                        {transactionsForCurrentMonth.length > 0 ? (
-                            transactionsForCurrentMonth
+                        <h3 className="h5 mb-3">{filterView} Transactions This Month</h3>
+                        {displayTransactions.length > 0 ? (
+                            displayTransactions
                                 .sort((a, b) => new Date(b.transactionDate) - new Date(a.transactionDate))
                                 .map(tx => (
                                     <TransactionItem
@@ -277,7 +244,7 @@ function TransactionManagement() {
                         ) : (
                             <div className="text-center p-5 bg-white rounded shadow-sm">
                                 <i className="bi bi-journal-x display-4 text-muted"></i>
-                                <h4 className="mt-3">No Transactions Found</h4>
+                                <h4 className="mt-3">{`No ${filterView} Transactions Found`}</h4>
                                 <p className="text-muted">Click "Add Transaction" to get started.</p>
                             </div>
                         )}

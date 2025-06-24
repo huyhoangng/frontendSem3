@@ -9,13 +9,13 @@ import { getCategories } from '../service/categoryService';
 // =====================================================================================
 
 const formatCurrency = (amount) => {
-    if (typeof amount !== 'number') return '0 VND';
-    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
+    if (typeof amount !== 'number') return '$0.00';
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 };
 
 const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('vi-VN');
+    return new Date(dateString).toLocaleDateString('en-US');
 };
 
 
@@ -126,7 +126,7 @@ const BudgetFormModal = ({ onClose, onSubmit, budgetToEdit, categories }) => {
                             <div className="mb-3">
                                 <label htmlFor="budgetAmount" className="form-label">Budget Amount</label>
                                 <div className="input-group">
-                                    <span className="input-group-text">VND</span>
+                                    <span className="input-group-text">$</span>
                                     <input type="number" className={`form-control ${errors.budgetAmount ? 'is-invalid' : ''}`} id="budgetAmount" name="budgetAmount" value={formData.budgetAmount} onChange={handleChange} min="0" required />
                                 </div>
                                 {errors.budgetAmount && <div className="invalid-feedback">{errors.budgetAmount}</div>}
