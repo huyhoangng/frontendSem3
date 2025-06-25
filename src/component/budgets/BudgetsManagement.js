@@ -1,12 +1,7 @@
-// src/components/budgets/BudgetsManagement.js
-
 import React, { useState, useEffect, useCallback } from 'react';
-import { getBudgets, createBudget, updateBudget, deleteBudget } from '../service/budgetService';
+import { useNavigate } from 'react-router-dom';
+import { getBudgets, createBudget, updateBudget, deleteBudget, getAccounts } from '../service/budgetService';
 import { getCategories } from '../service/categoryService';
-
-// =====================================================================================
-// HELPER FUNCTIONS (Hàm hỗ trợ)
-// =====================================================================================
 
 const formatCurrency = (amount) => {
     if (typeof amount !== 'number') return '$0.00';
@@ -18,21 +13,10 @@ const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('en-US');
 };
 
-
-// =====================================================================================
-// BUDGET FORM MODAL COMPONENT (Định nghĩa component Modal ngay tại đây)
-// =====================================================================================
-
-const BudgetFormModal = ({ onClose, onSubmit, budgetToEdit, categories }) => {
-    // ... Nội dung của component này không thay đổi, giữ nguyên như cũ ...
+const BudgetFormModal = ({ onClose, onSubmit, budgetToEdit, categories, accounts }) => {
     const [formData, setFormData] = useState({
-        budgetName: '',
-        budgetAmount: '',
-        budgetPeriod: 'Monthly',
-        startDate: '',
-        endDate: '',
-        alertThreshold: 80,
-        categoryId: ''
+        budgetName: '', budgetAmount: '', budgetPeriod: 'Monthly',
+        startDate: '', endDate: '', alertThreshold: 80, categoryId: '', accountId: ''
     });
     const [errors, setErrors] = useState({});
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -47,22 +31,22 @@ const BudgetFormModal = ({ onClose, onSubmit, budgetToEdit, categories }) => {
                 startDate: budgetToEdit.startDate ? new Date(budgetToEdit.startDate).toISOString().split('T')[0] : '',
                 endDate: budgetToEdit.endDate ? new Date(budgetToEdit.endDate).toISOString().split('T')[0] : '',
                 alertThreshold: budgetToEdit.alertThreshold,
-                categoryId: budgetToEdit.categoryId.toString()
+                categoryId: budgetToEdit.categoryId.toString(),
+                accountId: budgetToEdit.accountId ? budgetToEdit.accountId.toString() : ''
             });
         } else {
             const today = new Date();
             const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
             setFormData({
-                budgetName: '',
-                budgetAmount: '',
-                budgetPeriod: 'Monthly',
+                budgetName: '', budgetAmount: '', budgetPeriod: 'Monthly',
                 startDate: today.toISOString().split('T')[0],
                 endDate: endOfMonth.toISOString().split('T')[0],
                 alertThreshold: 80,
-                categoryId: ''
+                categoryId: categories[0]?.id.toString() || '',
+                accountId: accounts[0]?.id.toString() || ''
             });
         }
-    }, [budgetToEdit]);
+    }, [budgetToEdit, categories, accounts]);
 
     const validateForm = () => {
         const newErrors = {};
@@ -75,6 +59,7 @@ const BudgetFormModal = ({ onClose, onSubmit, budgetToEdit, categories }) => {
         if (formData.startDate && formData.endDate && new Date(formData.startDate) > new Date(formData.endDate)) newErrors.endDate = 'End date must be after start date';
         if (formData.alertThreshold && (isNaN(formData.alertThreshold) || formData.alertThreshold < 0 || formData.alertThreshold > 100)) newErrors.alertThreshold = 'Alert threshold must be between 0 and 100';
         if (!formData.categoryId) newErrors.categoryId = 'Category is required';
+        if (!formData.accountId) newErrors.accountId = 'Account is required';
 
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
@@ -86,13 +71,7 @@ const BudgetFormModal = ({ onClose, onSubmit, budgetToEdit, categories }) => {
 
         setIsSubmitting(true);
         try {
-            const payload = {
-                ...formData,
-                budgetAmount: parseFloat(formData.budgetAmount),
-                alertThreshold: parseFloat(formData.alertThreshold),
-                categoryId: parseInt(formData.categoryId, 10),
-            };
-            await onSubmit(payload);
+            await onSubmit(formData);
             onClose();
         } catch (error) {
             setErrors({ submit: error.message || 'Failed to save budget. Please try again.' });
@@ -166,6 +145,14 @@ const BudgetFormModal = ({ onClose, onSubmit, budgetToEdit, categories }) => {
                                 </select>
                                 {errors.categoryId && <div className="invalid-feedback">{errors.categoryId}</div>}
                             </div>
+                            <div className="mb-3">
+                                <label htmlFor="accountId" className="form-label">Account</label>
+                                <select className={`form-select ${errors.accountId ? 'is-invalid' : ''}`} id="accountId" name="accountId" value={formData.accountId} onChange={handleChange} required>
+                                    <option value="">Select an account</option>
+                                    {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.name}</option>)}
+                                </select>
+                                {errors.accountId && <div className="invalid-feedback">{errors.accountId}</div>}
+                            </div>
                         </div>
                         <div className="modal-footer">
                             <button type="button" className="btn btn-secondary" onClick={onClose} disabled={isSubmitting}>Cancel</button>
@@ -180,51 +167,45 @@ const BudgetFormModal = ({ onClose, onSubmit, budgetToEdit, categories }) => {
     );
 };
 
-
-// =====================================================================================
-// MAIN BUDGET MANAGEMENT COMPONENT (Component chính)
-// =====================================================================================
-
 const BudgetManagement = () => {
     const [budgets, setBudgets] = useState([]);
     const [categories, setCategories] = useState([]);
+    const [accounts, setAccounts] = useState([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [budgetToEdit, setBudgetToEdit] = useState(null);
     const [pageError, setPageError] = useState('');
     const [isLoading, setIsLoading] = useState(true);
     const [filterPeriod, setFilterPeriod] = useState('');
     const [filterCategory, setFilterCategory] = useState('');
+    const [filterAccount, setFilterAccount] = useState('');
     const [deleteConfirmation, setDeleteConfirmation] = useState(null);
     const [isProcessing, setIsProcessing] = useState(false);
 
-    const handleApiError = useCallback((error, context = 'operation') => {
-        let message = `Error during ${context}.`;
-        if (error.response) {
-            if (error.response.status === 401) {
-                message = 'Session expired. Redirecting to login...';
-            } else {
-                message = error.response.data?.message || `Server error (${error.response.status}).`;
-            }
+    const navigate = useNavigate();
+
+    const handleComponentError = useCallback((error) => {
+        if (error.message.includes('Unauthorized')) {
+            alert(error.message);
+            navigate('/login');
         } else {
-            message = error.message || `Unknown error.`;
+            setPageError(error.message);
         }
-        setPageError(message);
-        console.error(`API Error (${context}):`, error);
-    }, []);
+    }, [navigate]);
 
     const fetchData = useCallback(async () => {
         setIsLoading(true);
         setPageError('');
         try {
-            const [budgetsData, categoriesData] = await Promise.all([getBudgets(), getCategories()]);
+            const [budgetsData, categoriesData, accountsData] = await Promise.all([getBudgets(), getCategories(), getAccounts()]);
             setBudgets(budgetsData || []);
             setCategories(categoriesData.filter(cat => cat.isActive) || []);
+            setAccounts(accountsData.filter(acc => acc.isActive) || []);
         } catch (error) {
-            handleApiError(error, 'fetching data');
+            handleComponentError(error);
         } finally {
             setIsLoading(false);
         }
-    }, [handleApiError]);
+    }, [handleComponentError]);
 
     useEffect(() => {
         fetchData();
@@ -235,34 +216,28 @@ const BudgetManagement = () => {
         try {
             if (budgetToEdit) {
                 await updateBudget(budgetToEdit.id, budgetData);
-                alert('Budget updated successfully!');
             } else {
                 await createBudget(budgetData);
-                alert('Budget created successfully!');
             }
             await fetchData();
             handleCloseModal();
         } catch (error) {
-            handleApiError(error, 'saving budget');
+            console.error("Failed to save budget:", error);
             throw error;
         } finally {
             setIsProcessing(false);
         }
     };
 
-    const handleDeleteClick = (budget) => {
-        setDeleteConfirmation({ id: budget.id, name: budget.budgetName, amount: formatCurrency(budget.budgetAmount) });
-    };
-
     const confirmDelete = async () => {
         if (!deleteConfirmation) return;
         setIsProcessing(true);
+        setPageError('');
         try {
             await deleteBudget(deleteConfirmation.id);
-            alert('Budget deleted successfully!');
             await fetchData();
         } catch (error) {
-            handleApiError(error, 'deleting budget');
+            handleComponentError(error);
         } finally {
             setIsProcessing(false);
             setDeleteConfirmation(null);
@@ -270,11 +245,11 @@ const BudgetManagement = () => {
     };
 
     const handleOpenAddBudgetModal = () => {
-        if (categories.length > 0) {
+        if (categories.length > 0 && accounts.length > 0) {
             setBudgetToEdit(null);
             setIsModalOpen(true);
         } else {
-            alert("Please create categories first.");
+            setPageError("Cannot add a budget. Please create at least one category and one account first.");
         }
     };
 
@@ -288,34 +263,31 @@ const BudgetManagement = () => {
         setBudgetToEdit(null);
     };
 
-    // THAY ĐỔI Ở ĐÂY: Hàm calculateProgress được cập nhật
     const calculateProgress = (budget) => {
-        // Thêm kiểm tra an toàn
         if (!budget || typeof budget.budgetAmount !== 'number' || budget.budgetAmount <= 0) {
             return { percentage: 0, thresholdReached: false, remaining: 0 };
         }
         const spent = budget.spentAmount || 0;
         const percentage = (spent / budget.budgetAmount) * 100;
-        // Sử dụng alertThreshold để xác định trạng thái
         const thresholdReached = budget.alertThreshold ? (percentage >= budget.alertThreshold) : false;
-
         return {
             percentage: Math.min(percentage, 100),
-            thresholdReached, // Trả về trạng thái ngưỡng
+            thresholdReached,
             remaining: budget.budgetAmount - spent
         };
     };
 
     const filteredBudgets = budgets.filter(budget =>
         (!filterPeriod || budget.budgetPeriod === filterPeriod) &&
-        (!filterCategory || String(budget.categoryId) === String(filterCategory))
+        (!filterCategory || String(budget.categoryId) === String(filterCategory)) &&
+        (!filterAccount || String(budget.accountId) === String(filterAccount))
     );
 
     return (
         <div className="container mt-4">
             <div className="d-flex justify-content-between align-items-center mb-4">
                 <h1 className="h2 mb-0">Budget Management</h1>
-                <button className="btn btn-primary" onClick={handleOpenAddBudgetModal} disabled={categories.length === 0}>
+                <button className="btn btn-primary" onClick={handleOpenAddBudgetModal} disabled={categories.length === 0 || accounts.length === 0}>
                     <i className="bi bi-plus-circle-fill me-2"></i>Add Budget
                 </button>
             </div>
@@ -324,7 +296,7 @@ const BudgetManagement = () => {
                 <div className="card-body">
                     <h5 className="card-title mb-3">Filters</h5>
                     <div className="row g-3">
-                        <div className="col-md-6">
+                        <div className="col-md-4">
                             <label htmlFor="filterPeriod" className="form-label">Period</label>
                             <select id="filterPeriod" className="form-select" value={filterPeriod} onChange={e => setFilterPeriod(e.target.value)}>
                                 <option value="">All Periods</option>
@@ -334,11 +306,18 @@ const BudgetManagement = () => {
                                 <option value="Yearly">Yearly</option>
                             </select>
                         </div>
-                        <div className="col-md-6">
+                        <div className="col-md-4">
                             <label htmlFor="filterCategory" className="form-label">Category</label>
                             <select id="filterCategory" className="form-select" value={filterCategory} onChange={e => setFilterCategory(e.target.value)} disabled={categories.length === 0}>
                                 <option value="">All Categories</option>
                                 {categories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
+                            </select>
+                        </div>
+                        <div className="col-md-4">
+                            <label htmlFor="filterAccount" className="form-label">Account</label>
+                            <select id="filterAccount" className="form-select" value={filterAccount} onChange={e => setFilterAccount(e.target.value)} disabled={accounts.length === 0}>
+                                <option value="">All Accounts</option>
+                                {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.name}</option>)}
                             </select>
                         </div>
                     </div>
@@ -346,8 +325,8 @@ const BudgetManagement = () => {
             </div>
 
             {isLoading && <div className="text-center my-5"><div className="spinner-border text-primary"></div></div>}
-            {pageError && !isLoading && <div className="alert alert-danger">{pageError}</div>}
-            
+            {pageError && !isLoading && <div className="alert alert-danger" role="alert">{pageError}</div>}
+
             {!isLoading && !pageError && (
                 <div className="card shadow-sm">
                     <div className="table-responsive">
@@ -371,12 +350,10 @@ const BudgetManagement = () => {
                                             <td>
                                                 <div className="fw-bold">{budget.budgetName}</div>
                                                 <div className="progress mt-1" style={{ height: '8px' }}>
-                                                    {/* THAY ĐỔI Ở ĐÂY: Màu sắc progress bar dựa vào thresholdReached */}
                                                     <div className={`progress-bar ${progress.thresholdReached ? 'bg-danger' : 'bg-success'}`} role="progressbar" style={{ width: `${progress.percentage}%` }}></div>
                                                 </div>
                                                 <small className="text-muted">
                                                     {formatCurrency(budget.spentAmount || 0)} spent
-                                                    {/* THAY ĐỔI Ở ĐÂY: Hiển thị icon cảnh báo */}
                                                     {progress.thresholdReached && (
                                                         <span className="text-danger ms-2" title="Spending has reached the alert threshold">
                                                             <i className="bi bi-exclamation-triangle-fill"></i>
@@ -399,7 +376,7 @@ const BudgetManagement = () => {
                                             <td>{formatDate(budget.startDate)} - {formatDate(budget.endDate)}</td>
                                             <td className="text-center">
                                                 <button className="btn btn-sm btn-outline-secondary me-1" onClick={() => handleOpenEditBudgetModal(budget)} title="Edit Budget" disabled={isProcessing}><i className="bi bi-pencil-fill"></i></button>
-                                                <button className="btn btn-sm btn-outline-danger" onClick={() => handleDeleteClick(budget)} title="Delete Budget" disabled={isProcessing}><i className="bi bi-trash3-fill"></i></button>
+                                                <button className="btn btn-sm btn-outline-danger" onClick={() => setDeleteConfirmation(budget)} title="Delete Budget" disabled={isProcessing}><i className="bi bi-trash3-fill"></i></button>
                                             </td>
                                         </tr>
                                     );
@@ -409,8 +386,8 @@ const BudgetManagement = () => {
                     </div>
                 </div>
             )}
-            
-            {isModalOpen && <BudgetFormModal onClose={handleCloseModal} onSubmit={handleSubmitBudget} budgetToEdit={budgetToEdit} categories={categories} />}
+
+            {isModalOpen && <BudgetFormModal onClose={handleCloseModal} onSubmit={handleSubmitBudget} budgetToEdit={budgetToEdit} categories={categories} accounts={accounts} />}
 
             {deleteConfirmation && (
                 <div className="modal fade show" style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.5)' }}>
@@ -421,7 +398,7 @@ const BudgetManagement = () => {
                                 <button type="button" className="btn-close" onClick={() => setDeleteConfirmation(null)}></button>
                             </div>
                             <div className="modal-body">
-                                <p>Are you sure you want to delete the budget "<strong>{deleteConfirmation.name}</strong>"?</p>
+                                <p>Are you sure you want to delete the budget "<strong>{deleteConfirmation.budgetName}</strong>"?</p>
                                 <p className="text-danger">This action cannot be undone.</p>
                             </div>
                             <div className="modal-footer">

@@ -1,5 +1,3 @@
-// src/component/service/accountService.js
-
 import axios from 'axios';
 
 // API cho ACCOUNTS
@@ -7,25 +5,12 @@ const API_BASE_URL = 'https://localhost:7166/api/Accounts';
 
 const getAuthToken = () => localStorage.getItem('authToken');
 
-// Tên biến đúng là "apiClient"
 const apiClient = axios.create({
     baseURL: API_BASE_URL,
-     _getAuthHeaders(includeContentType = true) {
-
-    const token = localStorage.getItem('authToken'); 
-    
-    // 2. Tạo object headers cơ bản
-    const headers = {};
-    if (includeContentType) {
-      headers['Content-Type'] = 'application/json';
+    headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
     }
-
-    // 3. Nếu có token, thêm vào header Authorization
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-    return headers;
-}
 });
 
 // Sử dụng interceptor với "apiClient"
@@ -35,21 +20,29 @@ apiClient.interceptors.request.use(
         if (token) {
             config.headers['Authorization'] = `Bearer ${token}`;
         }
+        console.log('=== API Request ===', {
+            method: config.method.toUpperCase(),
+            url: config.url,
+            data: config.data
+        });
         return config;
     },
-    error => {
-        return Promise.reject(error);
-    }
+    error => Promise.reject(error)
 );
 
 // Helper function to normalize account data from API
 const normalizeAccountFromApi = (apiAccount) => {
+    console.log('=== Normalizing API Account ===', apiAccount);
+    const balance = parseFloat(apiAccount.balance) || 0; // Use 'balance' from response
+    if (apiAccount.balance && balance === 0 && apiAccount.balance !== 0) {
+        console.warn('API returned balance as 0, possible backend issue');
+    }
     return {
         id: apiAccount.accountId,
         name: apiAccount.accountName,
         type: apiAccount.accountType,
         bankName: apiAccount.bankName,
-        balance: Number(apiAccount.balance),
+        balance: balance,
         currency: apiAccount.currency || 'USD',
         isActive: apiAccount.isActive,
         createdAt: apiAccount.createdAt
@@ -58,7 +51,7 @@ const normalizeAccountFromApi = (apiAccount) => {
 
 // Helper function to format currency based on currency type
 export const formatCurrency = (amount, currency = 'USD') => {
-    if (typeof amount !== 'number') return '';
+    if (typeof amount !== 'number' || isNaN(amount)) return '0.00';
     const locale = currency === 'USD' ? 'en-US' : 'vi-VN';
     return new Intl.NumberFormat(locale, { 
         style: 'currency', 
@@ -69,8 +62,8 @@ export const formatCurrency = (amount, currency = 'USD') => {
 export const getAccounts = async () => {
     try {
         const response = await apiClient.get('/');
+        console.log('=== Get Accounts Response ===', response.data);
         const accountsData = Array.isArray(response.data) ? response.data : [];
-        // Áp dụng chuẩn hóa cho mọi account nhận về
         return accountsData.map(normalizeAccountFromApi);
     } catch (error) {
         console.error("API Error - getAccounts:", error.response?.data || error.message);
@@ -80,33 +73,38 @@ export const getAccounts = async () => {
 
 export const createAccount = async (accountData) => {
     try {
-        // Log the incoming data for debugging
-        console.log('Creating account with data:', accountData);
+        console.log('=== Creating Account: Input Data ===', accountData);
+        const balance = parseFloat(accountData.balance).toFixed(2);
+        if (isNaN(balance) || balance <= 0) {
+            throw new Error('Invalid balance: Must be a positive number');
+        }
 
         const apiPayload = {
             accountName: accountData.name,
             accountType: accountData.type,
-            bankName: null,
-            balance: Number(accountData.balance),
+            bankName: accountData.bankName || null,
+            initialBalance: parseFloat(balance), // Send 'initialBalance' in request
             currency: accountData.currency || 'USD',
             isActive: true,
-            accountNumber: '12345678'
+            accountNumber: accountData.accountNumber || '123456789',
+            creditLimit: 0
         };
 
-        // Log the payload being sent to API
-        console.log('Sending payload to API:', apiPayload);
-
+        console.log('=== Sending Payload to API ===', apiPayload);
         const response = await apiClient.post('/', apiPayload);
-        return normalizeAccountFromApi(response.data);
+        console.log('=== Create Account Response ===', response.data);
+        const normalizedAccount = normalizeAccountFromApi(response.data);
+        if (normalizedAccount.balance === 0 && parseFloat(balance) !== 0) {
+            throw new Error('API returned balance as 0, please check backend configuration');
+        }
+        return normalizedAccount;
     } catch (error) {
-        // Enhanced error logging
         if (error.response) {
-            console.error("API Error - createAccount:", {
+            console.error("=== API Error - createAccount ===", {
                 status: error.response.status,
                 data: error.response.data,
                 validationErrors: error.response.data?.errors
             });
-            // If there are validation errors, throw them in a more readable format
             if (error.response.data?.errors) {
                 const validationErrors = Object.entries(error.response.data.errors)
                     .map(([field, errors]) => `${field}: ${errors.join(', ')}`)
@@ -124,39 +122,35 @@ export const updateAccount = async (id, accountData) => {
     }
 
     try {
-        // Log the update attempt
-        console.log(`Attempting to update account ${id}:`, accountData);
+        console.log(`=== Updating Account ${id}: Input Data ===`, accountData);
+        const balance = parseFloat(accountData.balance).toFixed(2);
+        if (isNaN(balance) || balance < 0) {
+            throw new Error('Invalid balance: Must be a non-negative number');
+        }
 
         const apiPayload = {
             accountId: id,
             accountName: accountData.name,
             accountType: accountData.type,
-            bankName: null,
-            balance: Number(accountData.balance),
+            bankName: accountData.bankName || null,
+            initialBalance: parseFloat(balance), // Send 'initialBalance' in request
             currency: accountData.currency || 'USD',
             isActive: true,
-            accountNumber: '12345678'
+            accountNumber: accountData.accountNumber || '123456789',
+            creditLimit: 0
         };
 
-        console.log('Sending update payload to API:', apiPayload);
-
-        // Use the correct endpoint format
+        console.log('=== Sending Update Payload to API ===', apiPayload);
         const response = await apiClient.put(`/${id}`, apiPayload);
-        
-        // Log successful update
-        console.log(`Successfully updated account ${id}:`, response.data);
-
+        console.log(`=== Successfully Updated Account ${id} ===`, response.data);
         return normalizeAccountFromApi(response.data);
     } catch (error) {
-        // Enhanced error logging
         if (error.response) {
-            console.error(`API Error - updateAccount(${id}):`, {
+            console.error(`=== API Error - updateAccount(${id}) ===`, {
                 status: error.response.status,
                 data: error.response.data,
                 validationErrors: error.response.data?.errors
             });
-
-            // Handle specific error cases
             if (error.response.status === 404) {
                 throw new Error(`Account with ID ${id} not found`);
             } else if (error.response.status === 400) {

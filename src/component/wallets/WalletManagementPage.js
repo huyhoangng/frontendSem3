@@ -1,4 +1,3 @@
-// src/component/wallets/WalletManagementPage.js
 import React, { useState, useEffect, useCallback } from 'react';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -10,7 +9,9 @@ const AccountFormModal = ({ show, onClose, onSubmit, accountToEdit }) => {
         name: '',
         type: 'Cash',
         balance: '',
-        currency: 'USD'
+        currency: 'USD',
+        bankName: '',
+        accountNumber: ''
     };
 
     const [formData, setFormData] = useState(initialFormState);
@@ -28,7 +29,9 @@ const AccountFormModal = ({ show, onClose, onSubmit, accountToEdit }) => {
                 name: accountToEdit.name || '',
                 type: accountToEdit.type || 'Cash',
                 balance: accountToEdit.balance?.toString() || '',
-                currency: accountToEdit.currency || 'USD'
+                currency: accountToEdit.currency || 'USD',
+                bankName: accountToEdit.bankName || '',
+                accountNumber: accountToEdit.accountNumber || ''
             });
         } else {
             setFormData(initialFormState);
@@ -40,7 +43,7 @@ const AccountFormModal = ({ show, onClose, onSubmit, accountToEdit }) => {
         const { name, value } = e.target;
         setFormData(prev => ({
             ...prev,
-            [name]: value
+            [name]: name === 'balance' ? value : value.trim()
         }));
     };
 
@@ -51,8 +54,13 @@ const AccountFormModal = ({ show, onClose, onSubmit, accountToEdit }) => {
             errors.push('Account name is required');
         }
 
-        if (!formData.balance || isNaN(Number(formData.balance))) {
-            errors.push('Valid initial balance is required');
+        const balance = parseFloat(formData.balance);
+        if (formData.balance === '') {
+            errors.push('Initial balance is required');
+        } else if (isNaN(balance)) {
+            errors.push('Initial balance must be a valid number');
+        } else if (balance <= 0) {
+            errors.push('Initial balance must be greater than 0');
         }
 
         return errors;
@@ -72,11 +80,14 @@ const AccountFormModal = ({ show, onClose, onSubmit, accountToEdit }) => {
 
             const payload = {
                 name: formData.name.trim(),
-                type: 'Cash',
-                balance: Number(formData.balance),
-                currency: formData.currency
+                type: formData.type,
+                balance: parseFloat(formData.balance),
+                currency: formData.currency,
+                bankName: formData.bankName.trim() || null,
+                accountNumber: formData.accountNumber.trim() || '123456789'
             };
 
+            console.log('Submitting payload:', payload); // Debug
             await onSubmit(payload);
             onClose();
         } catch (err) {
@@ -120,7 +131,28 @@ const AccountFormModal = ({ show, onClose, onSubmit, accountToEdit }) => {
                                         required
                                     />
                                 </div>
-
+                                <div className="col-12">
+                                    <label className="form-label">Bank Name</label>
+                                    <input
+                                        type="text"
+                                        className="form-control"
+                                        name="bankName"
+                                        value={formData.bankName}
+                                        onChange={handleChange}
+                                        placeholder="Enter bank name (optional)"
+                                    />
+                                </div>
+                                <div className="col-12">
+                                    <label className="form-label">Account Number</label>
+                                    <input
+                                        type="text"
+                                        className="form-control"
+                                        name="accountNumber"
+                                        value={formData.accountNumber}
+                                        onChange={handleChange}
+                                        placeholder="Enter account number (optional)"
+                                    />
+                                </div>
                                 <div className="col-md-6">
                                     <label className="form-label">Initial Balance <span className="text-danger">*</span></label>
                                     <div className="input-group">
@@ -131,12 +163,13 @@ const AccountFormModal = ({ show, onClose, onSubmit, accountToEdit }) => {
                                             value={formData.balance}
                                             onChange={handleChange}
                                             placeholder="Enter initial balance"
+                                            step="0.01"
+                                            min="0.01"
                                             required
                                         />
                                         <span className="input-group-text">{formData.currency}</span>
                                     </div>
                                 </div>
-
                                 <div className="col-md-6">
                                     <label className="form-label">Currency</label>
                                     <select
@@ -238,14 +271,11 @@ const WalletManagementPage = () => {
     const handleSubmitAccount = async (formData) => {
         try {
             if (accountToEdit && accountToEdit.id) {
-                console.log('Updating account:', accountToEdit.id, formData);
-                await updateAccount(accountToEdit.id, {
-                    ...formData,
-                    type: accountToEdit.type // Preserve the original account type
-                });
+                console.log('Updating account:', accountToEdit.id, formData); // Debug
+                await updateAccount(accountToEdit.id, formData);
                 toast.success('Account updated successfully!');
             } else {
-                console.log('Creating new account:', formData);
+                console.log('Creating new account:', formData); // Debug
                 await createAccount(formData);
                 toast.success('Account created successfully!');
             }
@@ -261,7 +291,7 @@ const WalletManagementPage = () => {
                 }, 3000);
             } else if (err.message.includes('not found')) {
                 errorMessage = 'The account you are trying to update no longer exists.';
-            } else if (err.message.includes('Invalid account data')) {
+            } else {
                 errorMessage = err.message;
             }
             toast.error(errorMessage);

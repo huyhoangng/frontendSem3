@@ -1,49 +1,58 @@
-// src/service/budgetService.js
 import axios from 'axios';
 
-const API_BASE_URL = 'https://localhost:7166/api/budgets';
+const API_BASE_URL = 'https://localhost:7166/api';
 
-// Helper để lấy token, nếu không có sẽ báo lỗi
 const getAuthToken = () => {
-    const token = localStorage.getItem('authToken');
-    if (!token) {
-        // Ném lỗi này sẽ được bắt bởi interceptor hoặc hàm gọi
-        throw new Error('No valid authentication token found. Please log in.');
-    }
-    return token;
+    return localStorage.getItem('authToken');
 };
 
-// Chuẩn hóa dữ liệu nhận từ API sang dạng mà Frontend muốn dùng
 const normalizeBudgetFromApi = (apiBudget) => {
+    if (!apiBudget) return null;
+    console.log('Raw Budget from API:', apiBudget); // Debug
     return {
-        id: apiBudget.budgetId, // Đổi budgetId -> id
+        id: apiBudget.budgetId,
         budgetName: apiBudget.budgetName,
         budgetAmount: apiBudget.budgetAmount,
         budgetPeriod: apiBudget.budgetPeriod,
         startDate: apiBudget.startDate,
         endDate: apiBudget.endDate,
-        spentAmount: apiBudget.spentAmount,
+        spentAmount: apiBudget.spentAmount || 0,
         alertThreshold: apiBudget.alertThreshold,
         isActive: apiBudget.isActive,
-        categoryId: apiBudget.categoryId
+        categoryId: apiBudget.categoryId,
+        accountId: parseInt(apiBudget.accountId, 10) // Ensure number
     };
 };
 
-// Chuẩn hóa dữ liệu từ form ở Frontend sang dạng mà API yêu cầu
 const normalizeBudgetForApi = (budgetData) => {
-    return {
+    const budgetAmount = parseFloat(budgetData.budgetAmount);
+    const alertThreshold = parseFloat(budgetData.alertThreshold);
+    const categoryId = parseInt(budgetData.categoryId, 10);
+    const accountId = parseInt(budgetData.accountId, 10);
+    console.log('Normalized Budget for API:', { // Debug
         budgetName: budgetData.budgetName,
-        budgetAmount: budgetData.budgetAmount,
+        budgetAmount: isNaN(budgetAmount) ? 0 : budgetAmount,
         budgetPeriod: budgetData.budgetPeriod,
         startDate: budgetData.startDate,
         endDate: budgetData.endDate,
-        alertThreshold: budgetData.alertThreshold,
-        categoryId: budgetData.categoryId,
-        isActive: true // Luôn đặt là active khi tạo/cập nhật
+        alertThreshold: isNaN(alertThreshold) ? 80 : alertThreshold,
+        categoryId: isNaN(categoryId) ? null : categoryId,
+        accountId: isNaN(accountId) ? null : accountId,
+        isActive: true
+    });
+    return {
+        budgetName: budgetData.budgetName,
+        budgetAmount: isNaN(budgetAmount) ? 0 : budgetAmount,
+        budgetPeriod: budgetData.budgetPeriod,
+        startDate: budgetData.startDate,
+        endDate: budgetData.endDate,
+        alertThreshold: isNaN(alertThreshold) ? 80 : alertThreshold,
+        categoryId: isNaN(categoryId) ? null : categoryId,
+        accountId: isNaN(accountId) ? null : accountId,
+        isActive: true
     };
 };
 
-// Tạo một instance của axios
 const apiClient = axios.create({
     baseURL: API_BASE_URL,
     headers: {
@@ -52,46 +61,64 @@ const apiClient = axios.create({
     }
 });
 
-// Interceptor để tự động gắn token vào mỗi request
 apiClient.interceptors.request.use(
     config => {
-        try {
-            const token = getAuthToken();
+        const token = getAuthToken();
+        if (token) {
             config.headers['Authorization'] = `Bearer ${token}`;
-        } catch (error) {
-            // Nếu không có token, hủy request
-            return Promise.reject(error);
         }
         return config;
     },
-    error => {
-        return Promise.reject(error);
-    }
+    error => Promise.reject(error)
 );
 
+const handleApiError = (error, context) => {
+    console.error(`API Error in ${context}:`, error);
+    if (error.response) {
+        console.error(`[${context}] Server Response:`, JSON.stringify(error.response.data, null, 2));
+        if (error.response.status === 401) {
+            localStorage.removeItem('authToken');
+            throw new Error('Unauthorized: Your session has expired. Please log in again.');
+        }
+        if (error.response.status === 400) {
+            const errorData = error.response.data;
+            if (errorData.errors) {
+                const messages = Object.values(errorData.errors).flat().join(' ');
+                throw new Error(`Validation failed: ${messages}`);
+            }
+            if (errorData.error || errorData.message || typeof errorData === 'string') {
+                throw new Error(errorData.error || errorData.message || errorData);
+            }
+        }
+        throw new Error(error.response.data.message || `An unexpected server error occurred (${error.response.status}).`);
+    } else if (error.request) {
+        throw new Error('Network Error: Could not connect to the server. Please check your connection.');
+    } else {
+        throw new Error(error.message);
+    }
+};
 
 export const getBudgets = async () => {
     try {
-        const response = await apiClient.get('/');
+        const response = await apiClient.get('/budgets');
+        console.log('Budgets API Response:', response.data); // Debug
         const budgetsData = Array.isArray(response.data) ? response.data : [];
-        // Lọc các budget active và chuẩn hóa dữ liệu
         return budgetsData
             .filter(budget => budget.isActive)
             .map(normalizeBudgetFromApi);
     } catch (error) {
-        console.error("API Error - getBudgets:", error.response?.data || error.message);
-        throw error;
+        handleApiError(error, 'getBudgets');
     }
 };
 
 export const createBudget = async (budgetData) => {
     try {
         const apiPayload = normalizeBudgetForApi(budgetData);
-        const response = await apiClient.post('/', apiPayload);
+        const response = await apiClient.post('/budgets', apiPayload);
+        console.log('Create Budget Response:', response.data); // Debug
         return normalizeBudgetFromApi(response.data);
     } catch (error) {
-        console.error("API Error - createBudget:", error.response?.data || error.message);
-        throw error;
+        handleApiError(error, 'createBudget');
     }
 };
 
@@ -99,33 +126,48 @@ export const updateBudget = async (budgetId, budgetData) => {
     if (!budgetId) throw new Error('Budget ID is required for update');
     try {
         const apiPayload = normalizeBudgetForApi(budgetData);
-        // API của bạn có thể trả về NoContent (204) hoặc budget đã cập nhật
-        await apiClient.put(`/${budgetId}`, apiPayload);
-        // Giả định trả về thành công, ta có thể trả về object đã chuẩn hóa
-        return normalizeBudgetFromApi({ budgetId, ...apiPayload, spentAmount: budgetData.spentAmount || 0 });
+        const response = await apiClient.put(`/budgets/${budgetId}`, apiPayload);
+        console.log('Update Budget Response:', response.data); // Debug
+        if (response.status === 204 || !response.data) {
+            return normalizeBudgetFromApi({ budgetId, ...apiPayload, spentAmount: budgetData.spentAmount || 0 });
+        }
+        return normalizeBudgetFromApi(response.data);
     } catch (error) {
-        console.error(`API Error - updateBudget(${budgetId}):`, error.response?.data || error.message);
-        throw error;
+        handleApiError(error, `updateBudget(${budgetId})`);
     }
 };
 
 export const deleteBudget = async (budgetId) => {
     if (!budgetId) throw new Error('Budget ID is required for deletion');
     try {
-        await apiClient.delete(`/${budgetId}`);
+        await apiClient.delete(`/budgets/${budgetId}`);
     } catch (error) {
-        console.error(`API Error - deleteBudget(${budgetId}):`, error.response?.data || error.message);
-        throw error;
+        handleApiError(error, `deleteBudget(${budgetId})`);
     }
 };
 
-// Đừng quên hàm getBudgetAlerts nếu bạn vẫn muốn dùng
 export const getBudgetAlerts = async () => {
     try {
-        const response = await apiClient.get('/alerts');
+        const response = await apiClient.get('/budgets/alerts');
         return response.data;
     } catch (error) {
-        console.error("API Error - getBudgetAlerts:", error.response?.data || error.message);
-        throw error;
+        handleApiError(error, 'getBudgetAlerts');
+    }
+};
+
+export const getAccounts = async () => {
+    try {
+        const response = await apiClient.get('/Accounts');
+        console.log('Accounts API Response:', response.data); // Debug
+        const accountsData = Array.isArray(response.data) ? response.data : [];
+        return accountsData
+            .filter(account => account.isActive)
+            .map(account => ({
+                id: account.accountId,
+                name: account.accountName,
+                isActive: account.isActive
+            }));
+    } catch (error) {
+        handleApiError(error, 'getAccounts');
     }
 };
