@@ -1,18 +1,17 @@
 // src/service/investmentService.js
 import axios from 'axios';
 
-// Cấu hình base URL cho API investments
-const API_URL = 'https://localhost:7166/api/Investments';
+// Cấu hình base URL
+const API_BASE_URL = 'https://localhost:7166/api';
 
-// Tạo axios instance với cấu hình mặc định
 const apiClient = axios.create({
-    baseURL: API_URL,
+    baseURL: API_BASE_URL,
     headers: {
         'Content-Type': 'application/json'
     }
 });
 
-// Interceptor để tự động thêm token xác thực vào mỗi request
+// Interceptor để tự động thêm token xác thực
 apiClient.interceptors.request.use(
     (config) => {
         const token = localStorage.getItem('authToken');
@@ -21,60 +20,22 @@ apiClient.interceptors.request.use(
         }
         return config;
     },
-    (error) => {
-        return Promise.reject(error);
-    }
+    (error) => Promise.reject(error)
 );
 
-/**
- * Lấy danh sách tất cả các khoản đầu tư
- */
-export const getInvestments = () => {
-    return apiClient.get('/');
-};
+// --- Investment APIs ---
+export const getInvestments = () => apiClient.get('/Investments/');
+export const getInvestmentSummary = () => apiClient.get('/Investments/summary');
+export const addInvestment = (data) => apiClient.post('/Investments/', data);
+export const updateInvestment = (id, data) => apiClient.put(`/Investments/${id}`, data);
+export const deleteInvestment = (id) => apiClient.delete(`/Investments/${id}`);
+export const getInvestmentById = (id) => apiClient.get(`/Investments/${id}`);
 
+// --- MỚI: Account API (Lấy danh sách tài khoản để chọn) ---
 /**
- * Lấy dữ liệu tổng hợp về các khoản đầu tư
+ * Lấy danh sách tất cả các tài khoản của người dùng
  */
-export const getInvestmentSummary = () => {
-    return apiClient.get('/summary');
-};
-
-/**
- * Thêm một khoản đầu tư mới
- * @param {object} investmentData
- */
-export const addInvestment = (investmentData) => {
-    return apiClient.post('/', investmentData);
-};
-
-/**
- * Cập nhật một khoản đầu tư đã có bằng ID
- * @param {number} id - ID của khoản đầu tư cần cập nhật
- * @param {object} investmentData - Dữ liệu mới của khoản đầu tư
- */
-export const updateInvestment = (id, investmentData) => {
-    if (!id) {
-        return Promise.reject(new Error('Investment ID is required for update.'));
-    }
-    return apiClient.put(`/${id}`, investmentData);
-};
-
-/**
- * Xóa một khoản đầu tư theo ID
- * @param {number} id - ID của khoản đầu tư
- */
-export const deleteInvestment = (id) => {
-    if (!id) {
-        return Promise.reject(new Error('Investment ID is required for deletion.'));
-    }
-    return apiClient.delete(`/${id}`);
-};
-
-/**
- * Lấy thông tin chi tiết của một khoản đầu tư theo ID
- * @param {number} id - ID của khoản đầu tư
- */
-export const getInvestmentById = (id) => {
-    return apiClient.get(`/${id}`);
+export const getAccounts = () => {
+    // API này gọi đến một controller khác, nhưng dùng chung apiClient
+    return apiClient.get('/Accounts'); 
 };

@@ -1,7 +1,8 @@
 // src/pages/LoanPage.js
 import React, { useEffect, useState, useCallback } from 'react';
 import 'bootstrap/dist/css/bootstrap.min.css';
-import { getAllLoans, createLoan, updateLoan, deleteLoan, createLoanPayment } from '../service/loanService';
+// Cập nhật import để có cả getAccounts
+import { getAllLoans, createLoan, updateLoan, deleteLoan, createLoanPayment, getAccounts } from '../service/loanService';
 
 // --- Helper Functions ---
 const formatCurrency = (amount) => {
@@ -23,8 +24,8 @@ const toInputDate = (dateString) => {
     }
 };
 
-// --- Form Modal để tạo/sửa Khoản vay (ĐÃ KHÔI PHỤC ĐẦY ĐỦ) ---
-const LoanFormModal = ({ show, onClose, onSubmit, loanToEdit }) => {
+// --- Form Modal để tạo/sửa Khoản vay ---
+const LoanFormModal = ({ show, onClose, onSubmit, loanToEdit, accounts = [] }) => {
   const initialFormState = {
     loanName: '', loanType: '', borrower: '', borrowerPhone: '', borrowerEmail: '',
     originalAmount: '', interestRate: '', expectedPayment: '', paymentDueDate: 1,
@@ -71,12 +72,14 @@ const LoanFormModal = ({ show, onClose, onSubmit, loanToEdit }) => {
     }
   };
 
-  if (!show) return null;
+  if (!show) {
+    return null;
+  }
 
   return (
     <div className="modal fade show" style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.5)' }}>
-      {/* Thay đổi ở dòng dưới: thêm style={{ marginTop: '5vh' }} */}
-      <div className="modal-dialog modal-lg modal-dialog-scrollable" style={{ marginTop: '10vh' }}>
+      {/* <<< THAY ĐỔI DUY NHẤT Ở ĐÂY: Thêm class "modal-dialog-centered" >>> */}
+      <div className="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
         <div className="modal-content">
           <form onSubmit={handleSubmit}>
             <div className="modal-header">
@@ -94,13 +97,13 @@ const LoanFormModal = ({ show, onClose, onSubmit, loanToEdit }) => {
                 <div className="col-md-3"><label>Original Amount *</label><input name="originalAmount" value={formData.originalAmount} type="number" step="0.01" className="form-control" onChange={handleChange} required /></div>
                 <div className="col-md-3"><label>Interest Rate (%)</label><input name="interestRate" value={formData.interestRate} type="number" step="0.01" className="form-control" onChange={handleChange} /></div>
                 <div className="col-md-3"><label>Expected Payment</label><input name="expectedPayment" value={formData.expectedPayment} type="number" step="0.01" className="form-control" onChange={handleChange} /></div>
-                <div className="col-md-3"><label>Payment Due Day </label><input name="paymentDueDate" value={formData.paymentDueDate} type="number" className="form-control" onChange={handleChange} /></div>
+                <div className="col-md-3"><label>Payment Due Day</label><input name="paymentDueDate" value={formData.paymentDueDate} type="number" className="form-control" onChange={handleChange} /></div>
                 <div className="col-md-4"><label>Loan Date</label><input name="loanDate" value={formData.loanDate} type="date" className="form-control" onChange={handleChange} /></div>
                 <div className="col-md-4"><label>Next Payment Date</label><input name="nextPaymentDate" value={formData.nextPaymentDate} type="date" className="form-control" onChange={handleChange} /></div>
                 <div className="col-md-4"><label>Final Due Date</label><input name="dueDate" value={formData.dueDate} type="date" className="form-control" onChange={handleChange} /></div>
                 <div className="col-md-6"><label>Contract Document (URL)</label><input name="contractDocument" value={formData.contractDocument} className="form-control" onChange={handleChange} /></div>
                 <div className="col-md-6"><label>Notes</label><input name="notes" value={formData.notes} className="form-control" onChange={handleChange} /></div>
-                <div className="col-md-3"><label>Associated Account ID *</label><input name="accountId" value={formData.accountId} type="number" className="form-control" onChange={handleChange} required /></div>
+                <div className="col-md-6"><label>Associated Account *</label><select name="accountId" value={formData.accountId} className="form-select" onChange={handleChange} required><option value="">-- Select an Account --</option>{accounts.map(acc => (<option key={acc.accountId} value={acc.accountId}>{acc.accountName} ({formatCurrency(acc.balance)})</option>))}</select></div>
               </div>
             </div>
             <div className="modal-footer">
@@ -129,25 +132,12 @@ const LoanPaymentModal = ({ show, onClose, onSubmit, loanToPay }) => {
         e.preventDefault();
         setError('');
         const paymentAmount = parseFloat(amount);
-        if (isNaN(paymentAmount) || paymentAmount <= 0) {
-            setError('Payment amount must be a positive number.');
-            return;
-        }
-        if (paymentAmount > remainingBalance) {
-            setError(`Payment cannot exceed the remaining balance of ${formatCurrency(remainingBalance)}.`);
-            return;
-        }
-
+        if (isNaN(paymentAmount) || paymentAmount <= 0) { setError('Payment amount must be a positive number.'); return; }
+        if (paymentAmount > remainingBalance) { setError(`Payment cannot exceed the remaining balance of ${formatCurrency(remainingBalance)}.`); return; }
         const payload = {
-            loanId: loanToPay.loanId,
-            paymentAmount: paymentAmount,
-            paymentDate: new Date().toISOString(),
-            notes: notes,
-            principalAmount: 0,
-            interestAmount: 0,
-            paymentMethod: "Online Transfer"
+            loanId: loanToPay.loanId, paymentAmount: paymentAmount, paymentDate: new Date().toISOString(),
+            notes: notes, principalAmount: 0, interestAmount: 0, paymentMethod: "Online Transfer"
         };
-        
         setIsSubmitting(true);
         try {
             await onSubmit(payload);
@@ -183,6 +173,7 @@ const LoanPaymentModal = ({ show, onClose, onSubmit, loanToPay }) => {
 // --- Component chính ---
 const LoanManagement = () => {
     const [loans, setLoans] = useState([]);
+    const [accounts, setAccounts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -190,21 +181,22 @@ const LoanManagement = () => {
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
     const [loanToPay, setLoanToPay] = useState(null);
 
-    const fetchLoans = useCallback(async () => {
+    const fetchInitialData = useCallback(async () => {
         try {
             setLoading(true);
             setError(null);
-            const data = await getAllLoans();
-            setLoans(data);
+            const [loansData, accountsData] = await Promise.all([ getAllLoans(), getAccounts() ]);
+            setLoans(loansData);
+            setAccounts(accountsData);
         } catch (err) {
-            setError('Could not fetch loans. Please check your connection or try logging in again.');
-            console.error('Error fetching loans:', err);
+            setError('Could not fetch initial data. Please check your connection or try logging in again.');
+            console.error('Error fetching initial data:', err);
         } finally {
             setLoading(false);
         }
     }, []);
 
-    useEffect(() => { fetchLoans(); }, [fetchLoans]);
+    useEffect(() => { fetchInitialData(); }, [fetchInitialData]);
 
     const handleOpenAddModal = () => { setLoanToEdit(null); setIsFormModalOpen(true); };
     const handleCloseFormModal = () => { setIsFormModalOpen(false); setLoanToEdit(null); };
@@ -233,13 +225,9 @@ const LoanManagement = () => {
             accountId: parseInt(formData.accountId),
         };
         try {
-            // Logic để gọi API updateLoan hoặc createLoan
-            if (id) { 
-                await updateLoan(id, payload); alert('Loan updated successfully!'); 
-            } else { 
-                await createLoan(payload); alert('Loan created successfully!'); 
-            }
-            fetchLoans();
+            if (id) { await updateLoan(id, payload); alert('Loan updated successfully!'); } 
+            else { await createLoan(payload); alert('Loan created successfully!'); }
+            fetchInitialData();
         } catch (error) {
             console.error('Error saving loan:', error);
             throw new Error(error.response?.data?.title || error.response?.data?.message || 'Failed to save loan.');
@@ -250,22 +238,16 @@ const LoanManagement = () => {
         try {
             await createLoanPayment(payload.loanId, payload);
             alert('Payment submitted successfully!');
-            fetchLoans();
+            fetchInitialData();
         } catch (error) {
             console.error('Error submitting payment:', error);
             throw new Error(error.response?.data?.message || 'Failed to submit payment.');
         }
     };
     
-    // Logic của hàm handleDeleteLoan nếu bạn muốn thêm lại
-    // const handleDeleteLoan = async (id) => { ... };
-
     return (
         <div className="container mt-4">
-            <div className="d-flex justify-content-between align-items-center mb-4">
-                <h2 className="mb-0">Loan Management</h2>
-                <button className="btn btn-primary" onClick={handleOpenAddModal}><i className="bi bi-plus-circle me-2"></i>Add Loan</button>
-            </div>
+            <div className="d-flex justify-content-between align-items-center mb-4"><h2 className="mb-0">Loan Management</h2><button className="btn btn-primary" onClick={handleOpenAddModal}><i className="bi bi-plus-circle me-2"></i>Add Loan</button></div>
             {loading && <div className="text-center"><div className="spinner-border"></div><p>Loading data...</p></div>}
             {error && <div className="alert alert-danger">{error}</div>}
             {!loading && !error && (
@@ -290,9 +272,7 @@ const LoanManagement = () => {
                                     <tr key={loan.loanId}>
                                         <td>
                                             <div className="fw-bold">{loan.loanName}</div>
-                                            <div className="progress mt-1" style={{ height: '8px' }}>
-                                                <div className="progress-bar" role="progressbar" style={{ width: `${progress}%` }}></div>
-                                            </div>
+                                            <div className="progress mt-1" style={{ height: '8px' }}><div className="progress-bar" role="progressbar" style={{ width: `${progress}%` }}></div></div>
                                             <small className="text-muted">{Math.round(progress)}% paid</small>
                                         </td>
                                         <td>{loan.borrower}</td>
@@ -309,7 +289,6 @@ const LoanManagement = () => {
                                             >
                                                 <i className="bi bi-cash-coin"></i>
                                             </button>
-                                            {/* Bạn có thể thêm lại nút Edit/Delete ở đây nếu muốn */}
                                         </td>
                                     </tr>
                                 );
@@ -321,7 +300,7 @@ const LoanManagement = () => {
                 </div>
             )}
             
-            <LoanFormModal show={isFormModalOpen} onClose={handleCloseFormModal} onSubmit={handleSaveLoan} loanToEdit={loanToEdit} />
+            <LoanFormModal show={isFormModalOpen} onClose={handleCloseFormModal} onSubmit={handleSaveLoan} loanToEdit={loanToEdit} accounts={accounts} />
             <LoanPaymentModal show={isPaymentModalOpen} onClose={handleClosePaymentModal} onSubmit={handleSavePayment} loanToPay={loanToPay} />
         </div>
     );

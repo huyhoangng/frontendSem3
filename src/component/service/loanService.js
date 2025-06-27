@@ -1,7 +1,8 @@
 // src/service/loanService.js
 import axios from 'axios';
 
-const API_BASE_URL = 'https://localhost:7166/api/Loans';
+// Dùng chung base URL để linh hoạt
+const API_BASE_URL = 'https://localhost:7166/api';
 const getAuthToken = () => localStorage.getItem('authToken');
 
 const apiClient = axios.create({
@@ -37,9 +38,10 @@ apiClient.interceptors.response.use(
     }
 );
 
+// --- Loan APIs ---
 export const getAllLoans = async () => {
   try {
-    const response = await apiClient.get('/');
+    const response = await apiClient.get('/Loans');
     return Array.isArray(response.data) ? response.data : [];
   } catch (error) {
     console.error('Error fetching loans:', error.response?.data || error.message);
@@ -49,7 +51,7 @@ export const getAllLoans = async () => {
 
 export const createLoan = async (loanData) => {
   try {
-    const response = await apiClient.post('/', loanData);
+    const response = await apiClient.post('/Loans', loanData);
     return response.data;
   } catch (error) {
     console.error('Error creating loan:', error.response?.data || error.message);
@@ -59,9 +61,8 @@ export const createLoan = async (loanData) => {
 
 export const updateLoan = async (id, loanData) => {
   try {
-    await apiClient.put(`/${id}`, loanData);
-  } catch (error)
-  {
+    await apiClient.put(`/Loans/${id}`, loanData);
+  } catch (error) {
     console.error(`Error updating loan ${id}:`, error.response?.data || error.message);
     throw error;
   }
@@ -69,26 +70,34 @@ export const updateLoan = async (id, loanData) => {
 
 export const deleteLoan = async (id) => {
   try {
-    await apiClient.delete(`/${id}`);
+    await apiClient.delete(`/Loans/${id}`);
   } catch (error) {
     console.error(`Error deleting loan ${id}:`, error.response?.data || error.message);
     throw error;
   }
 };
 
-// MỚI: HÀM CÒN THIẾU GÂY RA LỖI ĐÃ ĐƯỢC THÊM VÀO
-/**
- * Creates a payment for a specific loan.
- * @param {number} loanId The ID of the loan to pay.
- * @param {object} paymentData The payment details.
- * @returns {Promise<object>} The server response after payment.
- */
 export const createLoanPayment = async (loanId, paymentData) => {
   try {
-    const response = await apiClient.post(`/${loanId}/payments`, paymentData);
+    const response = await apiClient.post(`/Loans/${loanId}/payments`, paymentData);
     return response.data;
   } catch (error) {
     console.error(`Error creating payment for loan ${loanId}:`, error.response?.data || error.message);
     throw error;
   }
+};
+
+// --- MỚI: Account API (Lấy danh sách tài khoản) ---
+/**
+ * Lấy danh sách tài khoản của người dùng
+ * @returns {Promise<Array>}
+ */
+export const getAccounts = async () => {
+    try {
+        const response = await apiClient.get('/Accounts');
+        return Array.isArray(response.data) ? response.data : [];
+    } catch (error) {
+        console.error('Error fetching accounts:', error.response?.data || error.message);
+        throw error;
+    }
 };
