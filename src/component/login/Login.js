@@ -26,14 +26,10 @@ const LoginPage = () => {
 
         try {
             const credentials = { email, password };
-            const result = await loginUser(credentials); // Gọi API đăng nhập
+            const result = await loginUser(credentials); 
 
             console.log('Login successful API Result:', result);
 
-            // Giả sử API trả về một object chứa token khi thành công
-            // Ví dụ: result = { token: "your_jwt_token", user: { ... } }
-            // Hoặc API có thể chỉ trả về token: result = "your_jwt_token_string" (cần điều chỉnh logic)
-            // Hoặc API trả về message: result = { message: "Login successful", token: "..." }
 
             if (result && (result.token || (typeof result === 'object' && result.message?.toLowerCase().includes('success')) || (typeof result === 'string' && result.toLowerCase().includes('success'))) ) {
                 // Lưu token (ví dụ)
@@ -43,7 +39,7 @@ const LoginPage = () => {
                     // ví dụ: dispatch({ type: 'LOGIN_SUCCESS', payload: result.user });
                 }
 
-                // Xử lý rememberMe nếu cần (ví dụ: lưu email)
+                
                 if (rememberMe) {
                     localStorage.setItem('rememberedEmail', email);
                 } else {
@@ -55,12 +51,12 @@ const LoginPage = () => {
                 navigate('/overview'); // Hoặc navigate('/') nếu bạn có logic redirect trong App.js
             } else {
                 // Nếu API trả về 200 OK nhưng không có token hoặc thông báo thành công rõ ràng
-                setError(result.message || 'Đăng nhập không thành công. Vui lòng kiểm tra lại thông tin.');
+                setError(result.message || 'Error Login. Please check your information.');
             }
 
         } catch (apiError) {
             console.error('Lỗi API khi đăng nhập:', apiError);
-            setError(apiError.message || 'Đã có lỗi xảy ra. Vui lòng thử lại sau.');
+            setError(apiError.message || 'Error. Try again!!');
         } finally {
             setIsLoading(false);
         }
@@ -81,10 +77,9 @@ const LoginPage = () => {
             <div className="login-form-wrapper card shadow-lg" style={{ width: '100%', maxWidth: '450px' }}>
                 <div className="login-form-container card-body p-4 p-md-5">
                     <div className="text-center mb-4">
-                        {/* Thay thế bằng logo của bạn nếu có */}
                         <i className="bi bi-box-arrow-in-right display-3 text-primary mb-2"></i>
-                        <h2 className="fw-bold">Đăng Nhập</h2>
-                        <p className="text-muted">Chào mừng trở lại! Vui lòng đăng nhập.</p>
+                        <h2 className="fw-bold">Login now</h2>
+                        <p className="text-muted">Welcome back!</p>
                     </div>
 
                     {error && (
@@ -105,7 +100,7 @@ const LoginPage = () => {
                                 required
                                 disabled={isLoading}
                             />
-                            <label htmlFor="floatingEmail">Địa chỉ Email</label>
+                            <label htmlFor="floatingEmail">Email</label>
                         </div>
 
                         <div className="form-floating mb-3">
@@ -119,7 +114,7 @@ const LoginPage = () => {
                                 required
                                 disabled={isLoading}
                             />
-                            <label htmlFor="floatingPassword">Mật khẩu</label>
+                            <label htmlFor="floatingPassword">Password</label>
                         </div>
 
                         <div className="d-flex justify-content-between align-items-center mb-4">
@@ -133,7 +128,7 @@ const LoginPage = () => {
                                     disabled={isLoading}
                                 />
                                 <label className="form-check-label" htmlFor="rememberMeCheck">
-                                    Ghi nhớ tôi
+                                    Remember account.
                                 </label>
                             </div>
                             <Link to="/forgot-password" tabIndex={isLoading ? -1 : 0} className={`text-decoration-none ${isLoading ? 'disabled-link pe-none' : ''}`}>Quên mật khẩu?</Link>
@@ -148,7 +143,7 @@ const LoginPage = () => {
                                 {isLoading ? (
                                     <>
                                         <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                                        Đang đăng nhập...
+                                        Loging in...
                                     </>
                                 ) : (
                                     'Đăng Nhập'
@@ -159,13 +154,13 @@ const LoginPage = () => {
 
                     <div className="text-center mt-4">
                         <p className="text-muted mb-0">
-                            Chưa có tài khoản?{' '}
-                            <Link to="/register" tabIndex={isLoading ? -1 : 0} className={`fw-medium text-decoration-none ${isLoading ? 'disabled-link pe-none' : ''}`}>Đăng ký ngay</Link>
+                            Don't have account?{' '}
+                            <Link to="/register" tabIndex={isLoading ? -1 : 0} className={`fw-medium text-decoration-none ${isLoading ? 'disabled-link pe-none' : ''}`}>Register now</Link>
                         </p>
                     </div>
                 </div>
                  <div className="login-footer card-footer text-center py-3 bg-transparent border-top-0">
-                    <small className="text-muted">© {new Date().getFullYear()} Mini Finance. All rights reserved.</small>
+                    <small className="text-muted">© {new Date().getFullYear()} Your Finance. All rights reserved.</small>
                 </div>
             </div>
         </div>

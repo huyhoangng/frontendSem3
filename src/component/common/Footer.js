@@ -10,7 +10,7 @@ const FooterScreen = () => {
                 <div className="row">
                     <div className="col-lg-12 col-12">
                         <p className="copyright-text text-center"> {/* Thêm text-center cho đẹp hơn */}
-                            Copyright © Mini Finance {currentYear}
+                            Copyright © Personal Finance {currentYear}
                              - Design: <a
                                 rel="sponsored" // rel="noopener noreferrer sponsored" an toàn hơn
                                 href="https://www.tooplate.com"
